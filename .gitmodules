@@ -4,3 +4,6 @@
 [submodule "TelinkSigMeshLib"]
 	path = TelinkSigMeshLib
 	url = https://github.com/thanhtunguet/TelinkSigMeshLib.git
+[submodule "example"]
+	path = example
+	url = git@github.com:thanhtunguet/RalliBluetooth.git
