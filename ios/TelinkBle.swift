@@ -1,8 +1,23 @@
-@objc(TelinkBle)
-class TelinkBle: NSObject {
+import AVFoundation
+import CoreBluetooth
+import React
+import UIKit
 
-    @objc(multiply:withB:withResolver:withRejecter:)
-    func multiply(a: Float, b: Float, resolve:RCTPromiseResolveBlock,reject:RCTPromiseRejectBlock) -> Void {
-        resolve(a*b)
+extension TelinkBle {
+    
+}
+
+
+extension Data {
+    struct HexEncodingOptions: OptionSet {
+        let rawValue: Int
+        static let upperCase = HexEncodingOptions(rawValue: 1 << 0)
+    }
+
+    func hexEncodedString(options: HexEncodingOptions = []) -> String {
+        let format = options.contains(.upperCase) ? "%02hhX" : "%02hhx"
+        return self.map {
+            String(format: format, $0)
+        }.joined(separator: ":")
     }
 }

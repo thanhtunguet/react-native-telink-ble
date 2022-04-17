@@ -1,9 +1,16 @@
 #import <React/RCTBridgeModule.h>
+#import "TelinkBle.h"
 
-@interface RCT_EXTERN_MODULE(TelinkBle, NSObject)
+@implementation TelinkBle
 
-RCT_EXTERN_METHOD(multiply:(float)a withB:(float)b
-                 withResolver:(RCTPromiseResolveBlock)resolve
-                 withRejecter:(RCTPromiseRejectBlock)reject)
++ (BOOL)requiresMainQueueSetup
+{
+    return true;
+}
+
+- (NSArray<NSString *> *)supportedEvents
+{
+    return @[];
+}
 
 @end

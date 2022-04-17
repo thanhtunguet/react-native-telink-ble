@@ -7,10 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-
-		5E555C0D2413F4C50049A1A2 /* TelinkBle.m in Sources */ = {isa = PBXBuildFile; fileRef = B3E7B5891CC2AC0600A0062D /* TelinkBle.m */; };
-		F4FF95D7245B92E800C19C63 /*  TelinkBle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4FF95D6245B92E800C19C63 /*  TelinkBle.swift */; };
-
+		701656E5280BF5440020DD21 /* AddDeviceStateModel.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656E4280BF5440020DD21 /* AddDeviceStateModel.m */; };
+		701656E8280BF5830020DD21 /* DemoCommand.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656E7280BF5830020DD21 /* DemoCommand.m */; };
+		701656ED280BF5D30020DD21 /* NSData+Conversion.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656EA280BF5D30020DD21 /* NSData+Conversion.m */; };
+		701656EE280BF5D30020DD21 /* NSString+extension.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656EC280BF5D30020DD21 /* NSString+extension.m */; };
+		701656F4280BF6CE0020DD21 /* TelinkBle+MeshSDK.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656F3280BF6CE0020DD21 /* TelinkBle+MeshSDK.m */; };
+		701656F7280BF7700020DD21 /* TelinkBle+SigMeshDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 701656F6280BF7700020DD21 /* TelinkBle+SigMeshDelegate.m */; };
+		F4FF95D7245B92E800C19C63 /* TelinkBle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4FF95D6245B92E800C19C63 /* TelinkBle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -27,11 +30,24 @@
 
 /* Begin PBXFileReference section */
 		134814201AA4EA6300B7C361 /* libTelinkBle.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libTelinkBle.a; sourceTree = BUILT_PRODUCTS_DIR; };
-
+		701656E0280BF21C0020DD21 /* TelinkBle.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TelinkBle.h; sourceTree = "<group>"; };
+		701656E1280BF43F0020DD21 /* BleEvent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BleEvent.h; sourceTree = "<group>"; };
+		701656E2280BF51A0020DD21 /* AddState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AddState.h; sourceTree = "<group>"; };
+		701656E3280BF5270020DD21 /* AddDeviceStateModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AddDeviceStateModel.h; sourceTree = "<group>"; };
+		701656E4280BF5440020DD21 /* AddDeviceStateModel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AddDeviceStateModel.m; sourceTree = "<group>"; };
+		701656E6280BF56D0020DD21 /* DemoCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DemoCommand.h; sourceTree = "<group>"; };
+		701656E7280BF5830020DD21 /* DemoCommand.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DemoCommand.m; sourceTree = "<group>"; };
+		701656E9280BF5A60020DD21 /* NSData+Conversion.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSData+Conversion.h"; sourceTree = "<group>"; };
+		701656EA280BF5D30020DD21 /* NSData+Conversion.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSData+Conversion.m"; sourceTree = "<group>"; };
+		701656EB280BF5D30020DD21 /* NSString+extension.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSString+extension.h"; sourceTree = "<group>"; };
+		701656EC280BF5D30020DD21 /* NSString+extension.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSString+extension.m"; sourceTree = "<group>"; };
+		701656F2280BF6BA0020DD21 /* TelinkBle+MeshSDK.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TelinkBle+MeshSDK.h"; sourceTree = "<group>"; };
+		701656F3280BF6CE0020DD21 /* TelinkBle+MeshSDK.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "TelinkBle+MeshSDK.m"; sourceTree = "<group>"; };
+		701656F5280BF75F0020DD21 /* TelinkBle+SigMeshDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TelinkBle+SigMeshDelegate.h"; sourceTree = "<group>"; };
+		701656F6280BF7700020DD21 /* TelinkBle+SigMeshDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "TelinkBle+SigMeshDelegate.m"; sourceTree = "<group>"; };
 		B3E7B5891CC2AC0600A0062D /* TelinkBle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TelinkBle.m; sourceTree = "<group>"; };
 		F4FF95D5245B92E700C19C63 /* TelinkBle-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TelinkBle-Bridging-Header.h"; sourceTree = "<group>"; };
 		F4FF95D6245B92E800C19C63 /* TelinkBle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelinkBle.swift; sourceTree = "<group>"; };
-
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,13 +72,50 @@
 		58B511D21A9E6C8500147676 = {
 			isa = PBXGroup;
 			children = (
-
-				F4FF95D6245B92E800C19C63 /* TelinkBle.swift */,
+				701656F1280BF67C0020DD21 /* DemoCommand */,
+				701656F0280BF6700020DD21 /* Models */,
+				701656EF280BF64C0020DD21 /* Extension */,
+				701656E1280BF43F0020DD21 /* BleEvent.h */,
+				701656E0280BF21C0020DD21 /* TelinkBle.h */,
 				B3E7B5891CC2AC0600A0062D /* TelinkBle.m */,
+				F4FF95D6245B92E800C19C63 /* TelinkBle.swift */,
+				701656F2280BF6BA0020DD21 /* TelinkBle+MeshSDK.h */,
+				701656F3280BF6CE0020DD21 /* TelinkBle+MeshSDK.m */,
+				701656F5280BF75F0020DD21 /* TelinkBle+SigMeshDelegate.h */,
+				701656F6280BF7700020DD21 /* TelinkBle+SigMeshDelegate.m */,
 				F4FF95D5245B92E700C19C63 /* TelinkBle-Bridging-Header.h */,
-
 				134814211AA4EA7D00B7C361 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		701656EF280BF64C0020DD21 /* Extension */ = {
+			isa = PBXGroup;
+			children = (
+				701656E9280BF5A60020DD21 /* NSData+Conversion.h */,
+				701656EA280BF5D30020DD21 /* NSData+Conversion.m */,
+				701656EB280BF5D30020DD21 /* NSString+extension.h */,
+				701656EC280BF5D30020DD21 /* NSString+extension.m */,
+			);
+			path = Extension;
+			sourceTree = "<group>";
+		};
+		701656F0280BF6700020DD21 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				701656E3280BF5270020DD21 /* AddDeviceStateModel.h */,
+				701656E4280BF5440020DD21 /* AddDeviceStateModel.m */,
+				701656E2280BF51A0020DD21 /* AddState.h */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		701656F1280BF67C0020DD21 /* DemoCommand */ = {
+			isa = PBXGroup;
+			children = (
+				701656E6280BF56D0020DD21 /* DemoCommand.h */,
+				701656E7280BF5830020DD21 /* DemoCommand.m */,
+			);
+			path = DemoCommand;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -122,10 +175,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-
+				701656EE280BF5D30020DD21 /* NSString+extension.m in Sources */,
+				701656F7280BF7700020DD21 /* TelinkBle+SigMeshDelegate.m in Sources */,
 				F4FF95D7245B92E800C19C63 /* TelinkBle.swift in Sources */,
-				B3E7B58A1CC2AC0600A0062D /* TelinkBle.m in Sources */,
-
+				701656F4280BF6CE0020DD21 /* TelinkBle+MeshSDK.m in Sources */,
+				701656E5280BF5440020DD21 /* AddDeviceStateModel.m in Sources */,
+				701656ED280BF5D30020DD21 /* NSData+Conversion.m in Sources */,
+				701656E8280BF5830020DD21 /* DemoCommand.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,11 +294,9 @@
 				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = TelinkBle;
 				SKIP_INSTALL = YES;
-
 				SWIFT_OBJC_BRIDGING_HEADER = "TelinkBle-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-
 			};
 			name = Debug;
 		};
@@ -259,10 +313,8 @@
 				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = TelinkBle;
 				SKIP_INSTALL = YES;
-
 				SWIFT_OBJC_BRIDGING_HEADER = "TelinkBle-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-
 			};
 			name = Release;
 		};
