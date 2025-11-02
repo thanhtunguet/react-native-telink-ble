@@ -15,8 +15,10 @@ import { TelinkErrorCode } from './types';
 // Export all types
 export * from './types';
 
-// Export provisioning workflow helper
+// Export helper classes
 export { ProvisioningWorkflow } from './ProvisioningWorkflow';
+export { DeviceController } from './DeviceController';
+export { GroupManager } from './GroupManager';
 
 // Event emitter for native events
 const eventEmitter = new NativeEventEmitter(NativeModules.TelinkBle);
@@ -210,6 +212,55 @@ class TelinkBle {
   ): Promise<void> {
     try {
       await TelinkBleNative.removeDeviceFromGroup(nodeAddress, groupAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async sendGroupCommand(
+    groupAddress: number,
+    isOn: boolean,
+    transitionTime?: number
+  ): Promise<void> {
+    try {
+      await TelinkBleNative.sendGroupCommand(
+        groupAddress,
+        isOn,
+        transitionTime
+      );
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  // Scene Control
+  async sendSceneStore(address: number, sceneId: number): Promise<void> {
+    try {
+      await TelinkBleNative.sendSceneStore(address, sceneId);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async sendSceneRecall(address: number, sceneId: number): Promise<void> {
+    try {
+      await TelinkBleNative.sendSceneRecall(address, sceneId);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async sendSceneDelete(address: number, sceneId: number): Promise<void> {
+    try {
+      await TelinkBleNative.sendSceneDelete(address, sceneId);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async sendSceneRegisterGet(address: number): Promise<number[]> {
+    try {
+      return await TelinkBleNative.sendSceneRegisterGet(address);
     } catch (error) {
       throw this.handleNativeError(error);
     }

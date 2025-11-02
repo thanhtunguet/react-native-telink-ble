@@ -618,12 +618,12 @@
     @try {
         UInt16 nodeAddr = (UInt16)nodeAddress;
         UInt16 groupAddr = (UInt16)groupAddress;
-        
+
         // Remove device from group subscription
-        [[SDKLibCommand share] configModelSubscriptionDeleteWithDestination:nodeAddr 
-                                                           subscriptionDelete:[[SigConfigModelSubscriptionDelete alloc] initWithElementAddress:nodeAddr address:groupAddr modelIdentifier:SigModelID_GenericOnOffServer] 
-                                                                   retryCount:2 
-                                                              responseMaxCount:1 
+        [[SDKLibCommand share] configModelSubscriptionDeleteWithDestination:nodeAddr
+                                                           subscriptionDelete:[[SigConfigModelSubscriptionDelete alloc] initWithElementAddress:nodeAddr address:groupAddr modelIdentifier:SigModelID_GenericOnOffServer]
+                                                                   retryCount:2
+                                                              responseMaxCount:1
                                                                   successCallback:^(UInt16 source, UInt16 destination, SigConfigModelSubscriptionStatus * _Nonnull responseMessage) {
             resolve(nil);
         } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
@@ -631,9 +631,154 @@
                 reject(@"GROUP_ERROR", [NSString stringWithFormat:@"Failed to remove device from group: %@", error.localizedDescription], error);
             }
         }];
-        
+
     } @catch (NSException *exception) {
         reject(@"GROUP_ERROR", [NSString stringWithFormat:@"Failed to remove device from group: %@", exception.reason], nil);
+    }
+}
+
+- (void)sendGroupCommand:(double)groupAddress
+                    isOn:(BOOL)isOn
+          transitionTime:(NSNumber *)transitionTime
+                resolver:(RCTPromiseResolveBlock)resolve
+                rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 groupAddr = (UInt16)groupAddress;
+        UInt8 transition = transitionTime ? [transitionTime unsignedCharValue] : 0;
+
+        // Send command to all devices in group
+        SigGenericOnOffSet *message = [[SigGenericOnOffSet alloc] initWithOnOff:isOn transitionTime:transition delay:0];
+
+        [[SDKLibCommand share] genericOnOffSetWithDestination:groupAddr
+                                                     onOffSet:message
+                                                   retryCount:2
+                                              responseMaxCount:1
+                                                  successCallback:^(UInt16 source, UInt16 destination, SigGenericOnOffStatus * _Nonnull responseMessage) {
+            resolve(nil);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"GROUP_ERROR", [NSString stringWithFormat:@"Failed to send group command: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"GROUP_ERROR", [NSString stringWithFormat:@"Failed to send group command: %@", exception.reason], nil);
+    }
+}
+
+// Scene Control
+- (void)sendSceneStore:(double)address
+               sceneId:(double)sceneId
+              resolver:(RCTPromiseResolveBlock)resolve
+              rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 nodeAddr = (UInt16)address;
+        UInt16 sceneNumber = (UInt16)sceneId;
+
+        SigSceneStore *message = [[SigSceneStore alloc] initWithSceneNumber:sceneNumber];
+
+        [[SDKLibCommand share] sceneStoreWithDestination:nodeAddr
+                                              sceneStore:message
+                                              retryCount:2
+                                         responseMaxCount:1
+                                             successCallback:^(UInt16 source, UInt16 destination, SigSceneRegisterStatus * _Nonnull responseMessage) {
+            resolve(nil);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to store scene: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to store scene: %@", exception.reason], nil);
+    }
+}
+
+- (void)sendSceneRecall:(double)address
+                sceneId:(double)sceneId
+               resolver:(RCTPromiseResolveBlock)resolve
+               rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 nodeAddr = (UInt16)address;
+        UInt16 sceneNumber = (UInt16)sceneId;
+
+        SigSceneRecall *message = [[SigSceneRecall alloc] initWithSceneNumber:sceneNumber transitionTime:0 delay:0];
+
+        [[SDKLibCommand share] sceneRecallWithDestination:nodeAddr
+                                              sceneRecall:message
+                                              retryCount:2
+                                         responseMaxCount:1
+                                             successCallback:^(UInt16 source, UInt16 destination, SigSceneStatus * _Nonnull responseMessage) {
+            resolve(nil);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to recall scene: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to recall scene: %@", exception.reason], nil);
+    }
+}
+
+- (void)sendSceneDelete:(double)address
+                sceneId:(double)sceneId
+               resolver:(RCTPromiseResolveBlock)resolve
+               rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 nodeAddr = (UInt16)address;
+        UInt16 sceneNumber = (UInt16)sceneId;
+
+        SigSceneDelete *message = [[SigSceneDelete alloc] initWithSceneNumber:sceneNumber];
+
+        [[SDKLibCommand share] sceneDeleteWithDestination:nodeAddr
+                                              sceneDelete:message
+                                              retryCount:2
+                                         responseMaxCount:1
+                                             successCallback:^(UInt16 source, UInt16 destination, SigSceneRegisterStatus * _Nonnull responseMessage) {
+            resolve(nil);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to delete scene: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to delete scene: %@", exception.reason], nil);
+    }
+}
+
+- (void)sendSceneRegisterGet:(double)address
+                    resolver:(RCTPromiseResolveBlock)resolve
+                    rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 nodeAddr = (UInt16)address;
+
+        SigSceneRegisterGet *message = [[SigSceneRegisterGet alloc] init];
+
+        [[SDKLibCommand share] sceneRegisterGetWithDestination:nodeAddr
+                                             sceneRegisterGet:message
+                                                   retryCount:2
+                                              responseMaxCount:1
+                                                  successCallback:^(UInt16 source, UInt16 destination, SigSceneRegisterStatus * _Nonnull responseMessage) {
+            NSMutableArray *scenes = [NSMutableArray array];
+            for (NSNumber *sceneNum in responseMessage.scenes) {
+                [scenes addObject:sceneNum];
+            }
+            resolve(scenes);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to get scene register: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"SCENE_ERROR", [NSString stringWithFormat:@"Failed to get scene register: %@", exception.reason], nil);
     }
 }
 

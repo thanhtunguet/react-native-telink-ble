@@ -60,6 +60,17 @@ export interface Spec extends TurboModule {
     nodeAddress: number,
     groupAddress: number
   ): Promise<void>;
+  sendGroupCommand(
+    groupAddress: number,
+    isOn: boolean,
+    transitionTime?: number
+  ): Promise<void>;
+
+  // Scene Control
+  sendSceneStore(address: number, sceneId: number): Promise<void>;
+  sendSceneRecall(address: number, sceneId: number): Promise<void>;
+  sendSceneDelete(address: number, sceneId: number): Promise<void>;
+  sendSceneRegisterGet(address: number): Promise<number[]>;
 
   // Network Information
   getAllNodes(): Promise<MeshNode[]>;

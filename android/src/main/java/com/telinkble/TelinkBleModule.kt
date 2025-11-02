@@ -441,13 +441,87 @@ class TelinkBleModule(reactContext: ReactApplicationContext) :
     try {
       val nodeAddr = nodeAddress.toInt()
       val groupAddr = groupAddress.toInt()
-      
+
       // Remove device from group subscription
       meshService?.removeDeviceFromGroup(nodeAddr, groupAddr)
-      
+
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("GROUP_ERROR", "Failed to remove device from group: ${e.message}", e)
+    }
+  }
+
+  override fun sendGroupCommand(groupAddress: Double, isOn: Boolean, transitionTime: Double?, promise: Promise) {
+    try {
+      val groupAddr = groupAddress.toInt()
+      val transition = transitionTime?.toInt() ?: 0
+
+      // Send command to all devices in group
+      meshService?.sendGenericOnOffSet(groupAddr, isOn, transition)
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("GROUP_ERROR", "Failed to send group command: ${e.message}", e)
+    }
+  }
+
+  // Scene Control
+  override fun sendSceneStore(address: Double, sceneId: Double, promise: Promise) {
+    try {
+      val nodeAddr = address.toInt()
+      val sceneNumber = sceneId.toInt()
+
+      // Send Scene Store command
+      meshService?.sendSceneStore(nodeAddr, sceneNumber)
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("SCENE_ERROR", "Failed to store scene: ${e.message}", e)
+    }
+  }
+
+  override fun sendSceneRecall(address: Double, sceneId: Double, promise: Promise) {
+    try {
+      val nodeAddr = address.toInt()
+      val sceneNumber = sceneId.toInt()
+
+      // Send Scene Recall command
+      meshService?.sendSceneRecall(nodeAddr, sceneNumber)
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("SCENE_ERROR", "Failed to recall scene: ${e.message}", e)
+    }
+  }
+
+  override fun sendSceneDelete(address: Double, sceneId: Double, promise: Promise) {
+    try {
+      val nodeAddr = address.toInt()
+      val sceneNumber = sceneId.toInt()
+
+      // Send Scene Delete command
+      meshService?.sendSceneDelete(nodeAddr, sceneNumber)
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("SCENE_ERROR", "Failed to delete scene: ${e.message}", e)
+    }
+  }
+
+  override fun sendSceneRegisterGet(address: Double, promise: Promise) {
+    try {
+      val nodeAddr = address.toInt()
+
+      // Send Scene Register Get command and retrieve stored scenes
+      meshService?.sendSceneRegisterGet(nodeAddr) { scenes ->
+        val sceneArray = Arguments.createArray()
+        scenes.forEach { sceneId ->
+          sceneArray.pushInt(sceneId)
+        }
+        promise.resolve(sceneArray)
+      }
+    } catch (e: Exception) {
+      promise.reject("SCENE_ERROR", "Failed to get scene register: ${e.message}", e)
     }
   }
 
