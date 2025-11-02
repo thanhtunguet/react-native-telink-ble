@@ -15,6 +15,9 @@ import { TelinkErrorCode } from './types';
 // Export all types
 export * from './types';
 
+// Export provisioning workflow helper
+export { ProvisioningWorkflow } from './ProvisioningWorkflow';
+
 // Event emitter for native events
 const eventEmitter = new NativeEventEmitter(NativeModules.TelinkBle);
 
@@ -108,6 +111,17 @@ class TelinkBle {
   async cancelProvisioning(): Promise<void> {
     try {
       await TelinkBleNative.cancelProvisioning();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async startFastProvisioning(
+    devices: DiscoveredDevice[],
+    startAddress: number
+  ): Promise<ProvisionResult[]> {
+    try {
+      return await TelinkBleNative.startFastProvisioning(devices, startAddress);
     } catch (error) {
       throw this.handleNativeError(error);
     }

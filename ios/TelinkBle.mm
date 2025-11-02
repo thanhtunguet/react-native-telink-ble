@@ -237,48 +237,115 @@
 {
     @try {
         NSString *deviceAddress = device[@"address"];
+        NSString *deviceUuid = device[@"advertisementData"][@"deviceUuid"] ?: deviceAddress;
         NSNumber *unicastAddress = config[@"unicastAddress"];
-        
+
         if (!deviceAddress || !unicastAddress) {
             reject(@"PROVISIONING_ERROR", @"Device address and unicast address are required", nil);
             return;
         }
-        
+
+        // Send provisioning started event
+        if (self.hasListeners) {
+            [self sendEventWithName:@"provisioningStarted" body:@{
+                @"deviceUuid": deviceUuid,
+                @"unicastAddress": unicastAddress
+            }];
+        }
+
         // Find peripheral by address
         CBPeripheral *peripheral = [self findPeripheralByAddress:deviceAddress];
         if (!peripheral) {
             reject(@"PROVISIONING_ERROR", @"Device not found", nil);
             return;
         }
-        
+
+        // Send initial progress event
+        if (self.hasListeners) {
+            [self sendEventWithName:@"provisioningProgress" body:@{
+                @"step": @"Connecting to device",
+                @"progress": @10,
+                @"deviceUuid": deviceUuid,
+                @"nodeAddress": unicastAddress
+            }];
+        }
+
         // Start provisioning
-        [[SigAddDeviceManager share] startAddDeviceWithNextAddress:[unicastAddress unsignedShortValue] 
-                                                       peripheral:peripheral 
-                                                   provisionType:ProvisionType_NoOOB 
-                                                     unicastAddress:[unicastAddress unsignedShortValue] 
-                                                         uuid:nil 
-                                                     keyBindType:KeyBindType_Normal 
-                                                   productID:0 
-                                                   cpsData:nil 
-                                                      isAutoAddNextDevice:NO 
+        [[SigAddDeviceManager share] startAddDeviceWithNextAddress:[unicastAddress unsignedShortValue]
+                                                       peripheral:peripheral
+                                                   provisionType:ProvisionType_NoOOB
+                                                     unicastAddress:[unicastAddress unsignedShortValue]
+                                                         uuid:nil
+                                                     keyBindType:KeyBindType_Normal
+                                                   productID:0
+                                                   cpsData:nil
+                                                      isAutoAddNextDevice:NO
                                                       provisionSuccess:^(NSString * _Nonnull identify, UInt16 address) {
+            // Send provision progress
+            if (self.hasListeners) {
+                [self sendEventWithName:@"provisioningProgress" body:@{
+                    @"step": @"Device provisioned successfully",
+                    @"progress": @90,
+                    @"deviceUuid": deviceUuid,
+                    @"nodeAddress": @(address)
+                }];
+            }
+
+            // Get device key from data source
+            SigNodeModel *node = [self.dataSource getNodeWithAddress:address];
+            NSString *deviceKey = node ? node.deviceKey : @"";
+
             // Provisioning success
-            resolve(@{
+            NSDictionary *result = @{
                 @"success": @YES,
                 @"nodeAddress": @(address),
-                @"deviceKey": @"", // Will be filled with actual device key
+                @"deviceKey": deviceKey,
                 @"uuid": identify ?: @""
-            });
+            };
+
+            // Send provisioning completed event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"provisioningCompleted" body:@{
+                    @"deviceUuid": identify,
+                    @"nodeAddress": @(address)
+                }];
+            }
+
+            resolve(result);
         } provisionFail:^(NSError * _Nonnull error) {
+            // Send provisioning failed event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"provisioningFailed" body:@{
+                    @"deviceUuid": deviceUuid,
+                    @"error": error.localizedDescription
+                }];
+            }
+
             // Provisioning failed
             reject(@"PROVISIONING_ERROR", [NSString stringWithFormat:@"Provisioning failed: %@", error.localizedDescription], error);
         } keyBindSuccess:^(NSString * _Nonnull identify, UInt16 address) {
-            // Key binding success (optional callback)
+            // Send key bind progress
+            if (self.hasListeners) {
+                [self sendEventWithName:@"provisioningProgress" body:@{
+                    @"step": @"Binding application keys",
+                    @"progress": @95,
+                    @"deviceUuid": deviceUuid,
+                    @"nodeAddress": @(address)
+                }];
+            }
         } keyBindFail:^(NSError * _Nonnull error) {
-            // Key binding failed (optional callback)
+            // Key binding failed - this might not be critical
+            NSLog(@"Key binding failed: %@", error.localizedDescription);
         }];
-        
+
     } @catch (NSException *exception) {
+        // Send provisioning failed event
+        if (self.hasListeners) {
+            [self sendEventWithName:@"provisioningFailed" body:@{
+                @"error": exception.reason
+            }];
+        }
+
         reject(@"PROVISIONING_ERROR", [NSString stringWithFormat:@"Failed to start provisioning: %@", exception.reason], nil);
     }
 }
@@ -291,6 +358,113 @@
         resolve(nil);
     } @catch (NSException *exception) {
         reject(@"PROVISIONING_ERROR", [NSString stringWithFormat:@"Failed to cancel provisioning: %@", exception.reason], nil);
+    }
+}
+
+- (void)startFastProvisioning:(NSArray *)devices
+                 startAddress:(double)startAddress
+                     resolver:(RCTPromiseResolveBlock)resolve
+                     rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        if (devices.count == 0) {
+            reject(@"PROVISIONING_ERROR", @"No devices provided for fast provisioning", nil);
+            return;
+        }
+
+        NSMutableArray *results = [NSMutableArray array];
+        __block UInt16 currentAddress = (UInt16)startAddress;
+        __block NSUInteger deviceIndex = 0;
+        NSUInteger totalDevices = devices.count;
+
+        // Recursive provisioning function
+        void (^provisionNextDevice)(void) = ^{
+            if (deviceIndex >= devices.count) {
+                // All devices processed
+                resolve(results);
+                return;
+            }
+
+            NSDictionary *device = devices[deviceIndex];
+            NSString *deviceAddress = device[@"address"];
+            NSString *deviceUuid = device[@"advertisementData"][@"deviceUuid"] ?: deviceAddress;
+
+            // Send progress event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"provisioningProgress" body:@{
+                    @"step": [NSString stringWithFormat:@"Fast provisioning device %lu/%lu", (unsigned long)(deviceIndex + 1), (unsigned long)totalDevices],
+                    @"progress": @((deviceIndex * 100) / totalDevices),
+                    @"deviceUuid": deviceUuid,
+                    @"nodeAddress": @(currentAddress)
+                }];
+            }
+
+            // Find peripheral
+            CBPeripheral *peripheral = [self findPeripheralByAddress:deviceAddress];
+            if (!peripheral) {
+                // Add failed result
+                [results addObject:@{
+                    @"success": @NO,
+                    @"error": @"Device not found",
+                    @"uuid": deviceUuid
+                }];
+                deviceIndex++;
+                currentAddress++;
+                provisionNextDevice();
+                return;
+            }
+
+            // Start provisioning for current device
+            [[SigAddDeviceManager share] startAddDeviceWithNextAddress:currentAddress
+                                                           peripheral:peripheral
+                                                       provisionType:ProvisionType_NoOOB
+                                                         unicastAddress:currentAddress
+                                                             uuid:nil
+                                                         keyBindType:KeyBindType_Fast
+                                                       productID:0
+                                                       cpsData:nil
+                                                          isAutoAddNextDevice:NO
+                                                          provisionSuccess:^(NSString * _Nonnull identify, UInt16 address) {
+                // Get device key
+                SigNodeModel *node = [self.dataSource getNodeWithAddress:address];
+                NSString *deviceKey = node ? node.deviceKey : @"";
+
+                // Add success result
+                [results addObject:@{
+                    @"success": @YES,
+                    @"nodeAddress": @(address),
+                    @"deviceKey": deviceKey,
+                    @"uuid": identify ?: @""
+                }];
+
+                // Provision next device
+                deviceIndex++;
+                currentAddress++;
+                provisionNextDevice();
+            } provisionFail:^(NSError * _Nonnull error) {
+                // Add failed result
+                [results addObject:@{
+                    @"success": @NO,
+                    @"error": error.localizedDescription,
+                    @"uuid": deviceUuid
+                }];
+
+                // Continue with next device
+                deviceIndex++;
+                currentAddress++;
+                provisionNextDevice();
+            } keyBindSuccess:^(NSString * _Nonnull identify, UInt16 address) {
+                // Key binding success
+            } keyBindFail:^(NSError * _Nonnull error) {
+                // Key binding failed - not critical for fast provisioning
+            }];
+        };
+
+        // Start provisioning first device
+        provisionNextDevice();
+
+    } @catch (NSException *exception) {
+        reject(@"PROVISIONING_ERROR", [NSString stringWithFormat:@"Failed to start fast provisioning: %@", exception.reason], nil);
     }
 }
 

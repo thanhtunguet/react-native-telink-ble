@@ -184,18 +184,83 @@ class TelinkBleModule(reactContext: ReactApplicationContext) :
   override fun startProvisioning(device: ReadableMap, config: ReadableMap, promise: Promise) {
     try {
       val deviceAddress = device.getString("address") ?: throw Exception("Device address is required")
+      val deviceUuid = device.getMap("advertisementData")?.getString("deviceUuid") ?: deviceAddress
       val unicastAddress = config.getInt("unicastAddress")
-      
+      val networkKeyIndex = config.getInt("networkKeyIndex")
+      val flags = config.getInt("flags")
+      val ivIndex = config.getInt("ivIndex")
+      val attentionDuration = if (config.hasKey("attentionDuration")) config.getInt("attentionDuration") else 0
+
+      // Send provisioning started event
+      val startedEvent = Arguments.createMap().apply {
+        putString("deviceUuid", deviceUuid)
+        putInt("unicastAddress", unicastAddress)
+      }
+      sendEvent("provisioningStarted", startedEvent)
+
       // Create provisioning parameters
       val provisioningParams = ProvisioningParameters().apply {
-        // Configure provisioning parameters based on config
+        this.unicastAddress = unicastAddress
+        this.networkKeyIndex = networkKeyIndex
+        this.ivIndex = ivIndex
+        this.flags = flags
+        this.attentionDuration = attentionDuration
       }
 
-      // Start provisioning process
-      meshService?.startProvisioning(deviceAddress, provisioningParams)
-      
-      promise.resolve(null)
+      // Start provisioning process with callbacks
+      meshService?.startProvisioning(deviceAddress, provisioningParams, object : ProvisioningCallback {
+        override fun onProgress(step: String, progress: Int) {
+          // Send provisioning progress event
+          val progressEvent = Arguments.createMap().apply {
+            putString("step", step)
+            putInt("progress", progress)
+            putString("deviceUuid", deviceUuid)
+            putInt("nodeAddress", unicastAddress)
+            putString("message", "Provisioning in progress: $step")
+          }
+          sendEvent("provisioningProgress", progressEvent)
+        }
+
+        override fun onSuccess(nodeAddress: Int, deviceKey: ByteArray, uuid: ByteArray) {
+          // Get composition data if available
+          val node = currentMeshInfo?.getDeviceByMeshAddress(nodeAddress)
+
+          val result = Arguments.createMap().apply {
+            putBoolean("success", true)
+            putInt("nodeAddress", nodeAddress)
+            putString("deviceKey", UnitConvert.bytes2HexString(deviceKey))
+            putString("uuid", UnitConvert.bytes2HexString(uuid))
+          }
+
+          // Send provisioning completed event
+          val completedEvent = Arguments.createMap().apply {
+            putString("deviceUuid", deviceUuid)
+            putInt("nodeAddress", nodeAddress)
+          }
+          sendEvent("provisioningCompleted", completedEvent)
+
+          promise.resolve(result)
+        }
+
+        override fun onFailure(error: String) {
+          // Send provisioning failed event
+          val failedEvent = Arguments.createMap().apply {
+            putString("deviceUuid", deviceUuid)
+            putString("error", error)
+          }
+          sendEvent("provisioningFailed", failedEvent)
+
+          promise.reject("PROVISIONING_ERROR", "Provisioning failed: $error")
+        }
+      })
+
     } catch (e: Exception) {
+      // Send provisioning failed event
+      val failedEvent = Arguments.createMap().apply {
+        putString("error", e.message ?: "Unknown error")
+      }
+      sendEvent("provisioningFailed", failedEvent)
+
       promise.reject("PROVISIONING_ERROR", "Failed to start provisioning: ${e.message}", e)
     }
   }
@@ -206,6 +271,97 @@ class TelinkBleModule(reactContext: ReactApplicationContext) :
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("PROVISIONING_ERROR", "Failed to cancel provisioning: ${e.message}", e)
+    }
+  }
+
+  override fun startFastProvisioning(devices: ReadableArray, startAddress: Double, promise: Promise) {
+    try {
+      val devicesList = mutableListOf<ReadableMap>()
+      for (i in 0 until devices.size()) {
+        devices.getMap(i)?.let { devicesList.add(it) }
+      }
+
+      if (devicesList.isEmpty()) {
+        promise.reject("PROVISIONING_ERROR", "No devices provided for fast provisioning")
+        return
+      }
+
+      val results = Arguments.createArray()
+      var currentAddress = startAddress.toInt()
+      var provisionedCount = 0
+      val totalDevices = devicesList.size
+
+      // Fast provision devices sequentially
+      fun provisionNextDevice(index: Int) {
+        if (index >= devicesList.size) {
+          // All devices processed
+          promise.resolve(results)
+          return
+        }
+
+        val device = devicesList[index]
+        val deviceAddress = device.getString("address") ?: ""
+        val deviceUuid = device.getMap("advertisementData")?.getString("deviceUuid") ?: deviceAddress
+
+        // Send progress event for fast provisioning
+        val progressEvent = Arguments.createMap().apply {
+          putString("step", "Fast provisioning device ${index + 1}/$totalDevices")
+          putInt("progress", ((index.toFloat() / totalDevices) * 100).toInt())
+          putString("deviceUuid", deviceUuid)
+          putInt("nodeAddress", currentAddress)
+        }
+        sendEvent("provisioningProgress", progressEvent)
+
+        // Create provisioning parameters for this device
+        val provisioningParams = ProvisioningParameters().apply {
+          this.unicastAddress = currentAddress
+          this.networkKeyIndex = 0
+          this.ivIndex = currentMeshInfo?.ivIndex ?: 0
+          this.flags = 0
+          this.attentionDuration = 0
+        }
+
+        // Start provisioning for current device
+        meshService?.startProvisioning(deviceAddress, provisioningParams, object : ProvisioningCallback {
+          override fun onProgress(step: String, progress: Int) {
+            // Progress events are handled by individual provisioning
+          }
+
+          override fun onSuccess(nodeAddress: Int, deviceKey: ByteArray, uuid: ByteArray) {
+            val result = Arguments.createMap().apply {
+              putBoolean("success", true)
+              putInt("nodeAddress", nodeAddress)
+              putString("deviceKey", UnitConvert.bytes2HexString(deviceKey))
+              putString("uuid", UnitConvert.bytes2HexString(uuid))
+            }
+            results.pushMap(result)
+            provisionedCount++
+
+            // Provision next device
+            currentAddress++
+            provisionNextDevice(index + 1)
+          }
+
+          override fun onFailure(error: String) {
+            val result = Arguments.createMap().apply {
+              putBoolean("success", false)
+              putString("error", error)
+              putString("uuid", deviceUuid)
+            }
+            results.pushMap(result)
+
+            // Continue with next device even if this one failed
+            currentAddress++
+            provisionNextDevice(index + 1)
+          }
+        })
+      }
+
+      // Start provisioning first device
+      provisionNextDevice(0)
+
+    } catch (e: Exception) {
+      promise.reject("PROVISIONING_ERROR", "Failed to start fast provisioning: ${e.message}", e)
     }
   }
 

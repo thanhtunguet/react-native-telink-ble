@@ -29,6 +29,10 @@ export interface Spec extends TurboModule {
     config: ProvisionConfig
   ): Promise<ProvisionResult>;
   cancelProvisioning(): Promise<void>;
+  startFastProvisioning(
+    devices: DiscoveredDevice[],
+    startAddress: number
+  ): Promise<ProvisionResult[]>;
 
   // Device Control
   sendGenericOnOff(
