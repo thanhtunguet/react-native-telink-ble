@@ -46,6 +46,35 @@ export {
   type ScheduleOptions,
 } from './helpers/MeshCommandScheduler';
 
+// Export Phase 7: React Context & Hooks
+export {
+  TelinkMeshProvider,
+  useTelinkMeshContext,
+  TelinkMeshContext,
+  type TelinkMeshContextValue,
+  type TelinkMeshProviderProps,
+  type MeshNetworkState,
+} from './context';
+
+export {
+  useTelinkMesh,
+  useDeviceControl,
+  useNetworkHealth,
+  useProvisioning,
+  useFirmwareUpdate,
+  useVendorCommands,
+  type UseDeviceControlOptions,
+  type UseDeviceControlReturn,
+  type UseNetworkHealthOptions,
+  type UseNetworkHealthReturn,
+  type UseProvisioningOptions,
+  type UseProvisioningReturn,
+  type UseFirmwareUpdateOptions,
+  type UseFirmwareUpdateReturn,
+  type UseVendorCommandsOptions,
+  type UseVendorCommandsReturn,
+} from './hooks';
+
 // Event emitter for native events
 const eventEmitter = new NativeEventEmitter(NativeModules.TelinkBle);
 
