@@ -4,8 +4,9 @@
 #import <TelinkBleSpec/TelinkBleSpec.h>
 #else
 #import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 #endif
 
-@interface TelinkBle : NSObject <NativeTelinkBleSpec>
+@interface TelinkBle : RCTEventEmitter <NativeTelinkBleSpec>
 
 @end
