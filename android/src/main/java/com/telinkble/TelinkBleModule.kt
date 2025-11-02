@@ -582,6 +582,417 @@ class TelinkBleModule(reactContext: ReactApplicationContext) :
     promise.resolve(isBluetoothEnabled())
   }
 
+  // Phase 4: Remote Provisioning
+  override fun startRemoteProvisioning(device: ReadableMap, config: ReadableMap, promise: Promise) {
+    try {
+      val deviceAddress = device.getString("address") ?: throw Exception("Device address is required")
+      val deviceUuid = device.getMap("advertisementData")?.getString("deviceUuid") ?: deviceAddress
+      val proxyNodeAddress = config.getInt("proxyNodeAddress")
+      val unicastAddress = config.getInt("unicastAddress")
+      val networkKeyIndex = config.getInt("networkKeyIndex")
+
+      // Send remote provisioning started event
+      val startedEvent = Arguments.createMap().apply {
+        putString("deviceUuid", deviceUuid)
+        putInt("proxyNodeAddress", proxyNodeAddress)
+        putInt("unicastAddress", unicastAddress)
+      }
+      sendEvent("remoteProvisioningStarted", startedEvent)
+
+      // Create remote provisioning parameters
+      val remoteProvisioningParams = RemoteProvisioningParameters().apply {
+        this.proxyNodeAddress = proxyNodeAddress
+        this.targetUnicastAddress = unicastAddress
+        this.networkKeyIndex = networkKeyIndex
+      }
+
+      // Start remote provisioning through proxy node
+      meshService?.startRemoteProvisioning(
+        deviceAddress,
+        remoteProvisioningParams,
+        object : RemoteProvisioningCallback {
+          override fun onProgress(step: String, progress: Int) {
+            val progressEvent = Arguments.createMap().apply {
+              putString("step", step)
+              putInt("progress", progress)
+              putString("deviceUuid", deviceUuid)
+              putInt("proxyNodeAddress", proxyNodeAddress)
+              putInt("nodeAddress", unicastAddress)
+            }
+            sendEvent("remoteProvisioningProgress", progressEvent)
+          }
+
+          override fun onSuccess(nodeAddress: Int, deviceKey: ByteArray, uuid: ByteArray) {
+            val result = Arguments.createMap().apply {
+              putBoolean("success", true)
+              putInt("nodeAddress", nodeAddress)
+              putString("deviceKey", UnitConvert.bytes2HexString(deviceKey))
+              putString("uuid", UnitConvert.bytes2HexString(uuid))
+              putInt("proxyNodeAddress", proxyNodeAddress)
+            }
+
+            // Send remote provisioning completed event
+            val completedEvent = Arguments.createMap().apply {
+              putString("deviceUuid", deviceUuid)
+              putInt("nodeAddress", nodeAddress)
+              putInt("proxyNodeAddress", proxyNodeAddress)
+            }
+            sendEvent("remoteProvisioningCompleted", completedEvent)
+
+            promise.resolve(result)
+          }
+
+          override fun onFailure(error: String) {
+            val failedEvent = Arguments.createMap().apply {
+              putString("deviceUuid", deviceUuid)
+              putString("error", error)
+              putInt("proxyNodeAddress", proxyNodeAddress)
+            }
+            sendEvent("remoteProvisioningFailed", failedEvent)
+
+            promise.reject("REMOTE_PROVISIONING_ERROR", "Remote provisioning failed: $error")
+          }
+        }
+      )
+
+    } catch (e: Exception) {
+      val failedEvent = Arguments.createMap().apply {
+        putString("error", e.message ?: "Unknown error")
+      }
+      sendEvent("remoteProvisioningFailed", failedEvent)
+
+      promise.reject("REMOTE_PROVISIONING_ERROR", "Failed to start remote provisioning: ${e.message}", e)
+    }
+  }
+
+  override fun cancelRemoteProvisioning(promise: Promise) {
+    try {
+      meshService?.stopRemoteProvisioning()
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("REMOTE_PROVISIONING_ERROR", "Failed to cancel remote provisioning: ${e.message}", e)
+    }
+  }
+
+  // Phase 4: Firmware Update (OTA)
+  override fun startFirmwareUpdate(config: ReadableMap, promise: Promise) {
+    try {
+      val nodeAddress = config.getInt("nodeAddress")
+      val firmwareData = config.getString("firmwareData") ?: throw Exception("Firmware data is required")
+      val firmwareBytes = UnitConvert.hexString2Bytes(firmwareData)
+      val metadata = config.getMap("metadata")
+
+      // Send firmware update started event
+      val startedEvent = Arguments.createMap().apply {
+        putInt("nodeAddress", nodeAddress)
+        putInt("firmwareSize", firmwareBytes.size)
+      }
+      sendEvent("firmwareUpdateStarted", startedEvent)
+
+      // Create OTA parameters
+      val otaParams = OTAParameters().apply {
+        this.targetNodeAddress = nodeAddress
+        this.firmwareData = firmwareBytes
+        this.chunkSize = config.getInt("chunkSize").takeIf { config.hasKey("chunkSize") } ?: 128
+      }
+
+      // Start firmware update process
+      meshService?.startFirmwareUpdate(otaParams, object : OTACallback {
+        override fun onProgress(
+          bytesTransferred: Int,
+          totalBytes: Int,
+          percentage: Int,
+          stage: String
+        ) {
+          val progressEvent = Arguments.createMap().apply {
+            putInt("nodeAddress", nodeAddress)
+            putInt("bytesTransferred", bytesTransferred)
+            putInt("totalBytes", totalBytes)
+            putInt("percentage", percentage)
+            putString("stage", stage)
+          }
+          sendEvent("firmwareUpdateProgress", progressEvent)
+        }
+
+        override fun onSuccess() {
+          val completedEvent = Arguments.createMap().apply {
+            putInt("nodeAddress", nodeAddress)
+          }
+          sendEvent("firmwareUpdateCompleted", completedEvent)
+
+          promise.resolve(null)
+        }
+
+        override fun onFailure(error: String) {
+          val failedEvent = Arguments.createMap().apply {
+            putInt("nodeAddress", nodeAddress)
+            putString("error", error)
+          }
+          sendEvent("firmwareUpdateFailed", failedEvent)
+
+          promise.reject("FIRMWARE_UPDATE_ERROR", "Firmware update failed: $error")
+        }
+      })
+
+    } catch (e: Exception) {
+      promise.reject("FIRMWARE_UPDATE_ERROR", "Failed to start firmware update: ${e.message}", e)
+    }
+  }
+
+  override fun cancelFirmwareUpdate(nodeAddress: Double, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+      meshService?.cancelFirmwareUpdate(addr)
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("FIRMWARE_UPDATE_ERROR", "Failed to cancel firmware update: ${e.message}", e)
+    }
+  }
+
+  override fun getFirmwareVersion(nodeAddress: Double, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+
+      // Request firmware version from node
+      meshService?.getFirmwareVersion(addr) { version ->
+        promise.resolve(version)
+      }
+    } catch (e: Exception) {
+      promise.reject("FIRMWARE_VERSION_ERROR", "Failed to get firmware version: ${e.message}", e)
+    }
+  }
+
+  override fun verifyFirmware(nodeAddress: Double, firmwareInfo: ReadableMap, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+      val firmwareData = firmwareInfo.getString("data") ?: throw Exception("Firmware data is required")
+      val firmwareBytes = UnitConvert.hexString2Bytes(firmwareData)
+      val expectedChecksum = firmwareInfo.getString("checksum")
+
+      // Verify firmware integrity
+      meshService?.verifyFirmware(addr, firmwareBytes, expectedChecksum) { isValid ->
+        promise.resolve(isValid)
+      }
+    } catch (e: Exception) {
+      promise.reject("FIRMWARE_VERIFY_ERROR", "Failed to verify firmware: ${e.message}", e)
+    }
+  }
+
+  // Phase 4: Network Health Monitoring
+  override fun startNetworkHealthMonitoring(config: ReadableMap, promise: Promise) {
+    try {
+      val interval = config.getInt("interval").takeIf { config.hasKey("interval") } ?: 30000 // 30 seconds default
+      val includeRSSI = config.getBoolean("includeRSSI")
+      val includeLatency = config.getBoolean("includeLatency")
+
+      // Start health monitoring
+      meshService?.startNetworkHealthMonitoring(interval, includeRSSI, includeLatency) { healthData ->
+        val healthEvent = Arguments.createMap().apply {
+          putMap("data", healthData)
+        }
+        sendEvent("networkHealthUpdate", healthEvent)
+      }
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("HEALTH_MONITORING_ERROR", "Failed to start network health monitoring: ${e.message}", e)
+    }
+  }
+
+  override fun stopNetworkHealthMonitoring(promise: Promise) {
+    try {
+      meshService?.stopNetworkHealthMonitoring()
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("HEALTH_MONITORING_ERROR", "Failed to stop network health monitoring: ${e.message}", e)
+    }
+  }
+
+  override fun getNetworkHealthReport(promise: Promise) {
+    try {
+      meshService?.getNetworkHealthReport { report ->
+        val reportMap = Arguments.createMap().apply {
+          putInt("totalNodes", report.totalNodes)
+          putInt("onlineNodes", report.onlineNodes)
+          putInt("offlineNodes", report.offlineNodes)
+          putDouble("averageRSSI", report.averageRSSI)
+          putDouble("averageLatency", report.averageLatency)
+          putDouble("packetLossRate", report.packetLossRate)
+        }
+        promise.resolve(reportMap)
+      }
+    } catch (e: Exception) {
+      promise.reject("HEALTH_REPORT_ERROR", "Failed to get network health report: ${e.message}", e)
+    }
+  }
+
+  override fun getNodeHealthStatus(nodeAddress: Double, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+
+      meshService?.getNodeHealthStatus(addr) { status ->
+        val statusMap = Arguments.createMap().apply {
+          putInt("nodeAddress", status.nodeAddress)
+          putBoolean("isOnline", status.isOnline)
+          putInt("rssi", status.rssi)
+          putInt("latency", status.latency)
+          putInt("failedMessages", status.failedMessages)
+          putInt("successfulMessages", status.successfulMessages)
+          putDouble("reliability", status.reliability)
+        }
+        promise.resolve(statusMap)
+      }
+    } catch (e: Exception) {
+      promise.reject("HEALTH_STATUS_ERROR", "Failed to get node health status: ${e.message}", e)
+    }
+  }
+
+  override fun getNetworkTopology(promise: Promise) {
+    try {
+      meshService?.getNetworkTopology { topology ->
+        val nodesArray = Arguments.createArray()
+        topology.nodes.forEach { node ->
+          val nodeMap = Arguments.createMap().apply {
+            putInt("address", node.address)
+            putInt("rssi", node.rssi)
+            putInt("hopCount", node.hopCount)
+
+            val neighborsArray = Arguments.createArray()
+            node.neighbors.forEach { neighbor ->
+              neighborsArray.pushInt(neighbor)
+            }
+            putArray("neighbors", neighborsArray)
+          }
+          nodesArray.pushMap(nodeMap)
+        }
+
+        val topologyMap = Arguments.createMap().apply {
+          putArray("nodes", nodesArray)
+        }
+        promise.resolve(topologyMap)
+      }
+    } catch (e: Exception) {
+      promise.reject("TOPOLOGY_ERROR", "Failed to get network topology: ${e.message}", e)
+    }
+  }
+
+  override fun measureNodeLatency(nodeAddress: Double, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+      val startTime = System.currentTimeMillis()
+
+      // Send ping message to node and measure response time
+      meshService?.pingNode(addr) { success ->
+        if (success) {
+          val latency = System.currentTimeMillis() - startTime
+          promise.resolve(latency.toDouble())
+        } else {
+          promise.reject("LATENCY_ERROR", "Failed to measure latency: No response from node")
+        }
+      }
+    } catch (e: Exception) {
+      promise.reject("LATENCY_ERROR", "Failed to measure node latency: ${e.message}", e)
+    }
+  }
+
+  // Phase 4: Vendor-Specific Commands
+  override fun sendVendorCommand(target: Double, command: ReadableMap, promise: Promise) {
+    try {
+      val targetAddress = target.toInt()
+      val opcode = command.getInt("opcode")
+      val companyId = command.getInt("companyId")
+      val parameters = command.getString("parameters") ?: ""
+      val paramBytes = if (parameters.isNotEmpty()) UnitConvert.hexString2Bytes(parameters) else byteArrayOf()
+      val acknowledged = command.getBoolean("acknowledged")
+
+      // Send vendor-specific command
+      meshService?.sendVendorMessage(
+        targetAddress,
+        opcode,
+        companyId,
+        paramBytes,
+        acknowledged
+      ) { response ->
+        if (response != null) {
+          val responseMap = Arguments.createMap().apply {
+            putInt("source", response.sourceAddress)
+            putInt("opcode", response.opcode)
+            putString("data", UnitConvert.bytes2HexString(response.data))
+            putBoolean("success", true)
+          }
+          promise.resolve(responseMap)
+        } else {
+          if (acknowledged) {
+            promise.reject("VENDOR_COMMAND_ERROR", "No response received from device")
+          } else {
+            // Unacknowledged command - resolve immediately
+            promise.resolve(null)
+          }
+        }
+      }
+
+    } catch (e: Exception) {
+      promise.reject("VENDOR_COMMAND_ERROR", "Failed to send vendor command: ${e.message}", e)
+    }
+  }
+
+  override fun getVendorModels(nodeAddress: Double, promise: Promise) {
+    try {
+      val addr = nodeAddress.toInt()
+
+      // Get composition data to extract vendor models
+      meshService?.getCompositionData(addr) { compositionData ->
+        val vendorModelsArray = Arguments.createArray()
+
+        compositionData.elements.forEach { element ->
+          element.vendorModels.forEach { model ->
+            val modelMap = Arguments.createMap().apply {
+              putInt("companyId", model.companyId)
+              putInt("modelId", model.modelId)
+              putInt("elementAddress", element.address)
+            }
+            vendorModelsArray.pushMap(modelMap)
+          }
+        }
+
+        promise.resolve(vendorModelsArray)
+      }
+    } catch (e: Exception) {
+      promise.reject("VENDOR_MODELS_ERROR", "Failed to get vendor models: ${e.message}", e)
+    }
+  }
+
+  override fun registerVendorMessageHandler(companyId: Double, promise: Promise) {
+    try {
+      val company = companyId.toInt()
+
+      // Register handler for vendor messages from this company
+      meshService?.registerVendorMessageHandler(company) { message ->
+        val messageEvent = Arguments.createMap().apply {
+          putInt("companyId", company)
+          putInt("source", message.sourceAddress)
+          putInt("opcode", message.opcode)
+          putString("data", UnitConvert.bytes2HexString(message.data))
+        }
+        sendEvent("vendorMessageReceived", messageEvent)
+      }
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("VENDOR_HANDLER_ERROR", "Failed to register vendor message handler: ${e.message}", e)
+    }
+  }
+
+  override fun unregisterVendorMessageHandler(companyId: Double, promise: Promise) {
+    try {
+      val company = companyId.toInt()
+      meshService?.unregisterVendorMessageHandler(company)
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("VENDOR_HANDLER_ERROR", "Failed to unregister vendor message handler: ${e.message}", e)
+    }
+  }
+
   // Event listeners (required by TurboModule spec)
   override fun addListener(eventName: String) {
     // Event listeners are handled by React Native's EventEmitter

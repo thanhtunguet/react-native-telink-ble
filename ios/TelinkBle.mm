@@ -829,6 +829,497 @@
     }
 }
 
+// Phase 4: Remote Provisioning
+- (void)startRemoteProvisioning:(NSDictionary *)device
+                         config:(NSDictionary *)config
+                       resolver:(RCTPromiseResolveBlock)resolve
+                       rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        NSString *deviceAddress = device[@"address"];
+        NSString *deviceUuid = device[@"advertisementData"][@"deviceUuid"] ?: deviceAddress;
+        NSNumber *proxyNodeAddress = config[@"proxyNodeAddress"];
+        NSNumber *unicastAddress = config[@"unicastAddress"];
+        NSNumber *networkKeyIndex = config[@"networkKeyIndex"];
+
+        if (!deviceAddress || !proxyNodeAddress || !unicastAddress) {
+            reject(@"REMOTE_PROVISIONING_ERROR", @"Device address, proxy node address, and unicast address are required", nil);
+            return;
+        }
+
+        // Send remote provisioning started event
+        if (self.hasListeners) {
+            [self sendEventWithName:@"remoteProvisioningStarted" body:@{
+                @"deviceUuid": deviceUuid,
+                @"proxyNodeAddress": proxyNodeAddress,
+                @"unicastAddress": unicastAddress
+            }];
+        }
+
+        // Find peripheral by address
+        CBPeripheral *peripheral = [self findPeripheralByAddress:deviceAddress];
+        if (!peripheral) {
+            reject(@"REMOTE_PROVISIONING_ERROR", @"Device not found", nil);
+            return;
+        }
+
+        // Start remote provisioning through proxy node
+        [[SigRemoteAddManager share] startRemoteProvisionWithNextAddress:[unicastAddress unsignedShortValue]
+                                                          proxyAddress:[proxyNodeAddress unsignedShortValue]
+                                                            peripheral:peripheral
+                                                       provisionSuccess:^(NSString * _Nonnull identify, UInt16 address) {
+            // Send progress event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"remoteProvisioningProgress" body:@{
+                    @"step": @"Remote provisioning completed",
+                    @"progress": @100,
+                    @"deviceUuid": deviceUuid,
+                    @"proxyNodeAddress": proxyNodeAddress,
+                    @"nodeAddress": @(address)
+                }];
+            }
+
+            // Get device key
+            SigNodeModel *node = [self.dataSource getNodeWithAddress:address];
+            NSString *deviceKey = node ? node.deviceKey : @"";
+
+            NSDictionary *result = @{
+                @"success": @YES,
+                @"nodeAddress": @(address),
+                @"deviceKey": deviceKey,
+                @"uuid": identify ?: @"",
+                @"proxyNodeAddress": proxyNodeAddress
+            };
+
+            // Send remote provisioning completed event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"remoteProvisioningCompleted" body:@{
+                    @"deviceUuid": identify,
+                    @"nodeAddress": @(address),
+                    @"proxyNodeAddress": proxyNodeAddress
+                }];
+            }
+
+            resolve(result);
+        } provisionFail:^(NSError * _Nonnull error) {
+            // Send remote provisioning failed event
+            if (self.hasListeners) {
+                [self sendEventWithName:@"remoteProvisioningFailed" body:@{
+                    @"deviceUuid": deviceUuid,
+                    @"error": error.localizedDescription,
+                    @"proxyNodeAddress": proxyNodeAddress
+                }];
+            }
+
+            reject(@"REMOTE_PROVISIONING_ERROR", [NSString stringWithFormat:@"Remote provisioning failed: %@", error.localizedDescription], error);
+        }];
+
+    } @catch (NSException *exception) {
+        if (self.hasListeners) {
+            [self sendEventWithName:@"remoteProvisioningFailed" body:@{
+                @"error": exception.reason
+            }];
+        }
+
+        reject(@"REMOTE_PROVISIONING_ERROR", [NSString stringWithFormat:@"Failed to start remote provisioning: %@", exception.reason], nil);
+    }
+}
+
+- (void)cancelRemoteProvisioning:(RCTPromiseResolveBlock)resolve
+                        rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        [[SigRemoteAddManager share] stopRemoteProvision];
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"REMOTE_PROVISIONING_ERROR", [NSString stringWithFormat:@"Failed to cancel remote provisioning: %@", exception.reason], nil);
+    }
+}
+
+// Phase 4: Firmware Update (OTA)
+- (void)startFirmwareUpdate:(NSDictionary *)config
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        NSNumber *nodeAddress = config[@"nodeAddress"];
+        NSString *firmwareData = config[@"firmwareData"];
+
+        if (!nodeAddress || !firmwareData) {
+            reject(@"FIRMWARE_UPDATE_ERROR", @"Node address and firmware data are required", nil);
+            return;
+        }
+
+        NSData *firmwareBytes = [LibTools nsstringToHex:firmwareData];
+        UInt16 address = [nodeAddress unsignedShortValue];
+
+        // Send firmware update started event
+        if (self.hasListeners) {
+            [self sendEventWithName:@"firmwareUpdateStarted" body:@{
+                @"nodeAddress": nodeAddress,
+                @"firmwareSize": @(firmwareBytes.length)
+            }];
+        }
+
+        // Start OTA firmware update
+        [[SigMeshLib share] firmwareUpdateWithDestination:address
+                                             firmwareData:firmwareBytes
+                                              chunkSize:config[@"chunkSize"] ? [config[@"chunkSize"] intValue] : 128
+                                           progressBlock:^(NSInteger bytesTransferred, NSInteger totalBytes, float percentage) {
+            if (self.hasListeners) {
+                [self sendEventWithName:@"firmwareUpdateProgress" body:@{
+                    @"nodeAddress": nodeAddress,
+                    @"bytesTransferred": @(bytesTransferred),
+                    @"totalBytes": @(totalBytes),
+                    @"percentage": @((int)(percentage * 100)),
+                    @"stage": @"Uploading"
+                }];
+            }
+        } finishBlock:^(BOOL isSuccess, NSError * _Nullable error) {
+            if (isSuccess) {
+                if (self.hasListeners) {
+                    [self sendEventWithName:@"firmwareUpdateCompleted" body:@{
+                        @"nodeAddress": nodeAddress
+                    }];
+                }
+                resolve(nil);
+            } else {
+                if (self.hasListeners) {
+                    [self sendEventWithName:@"firmwareUpdateFailed" body:@{
+                        @"nodeAddress": nodeAddress,
+                        @"error": error.localizedDescription
+                    }];
+                }
+                reject(@"FIRMWARE_UPDATE_ERROR", [NSString stringWithFormat:@"Firmware update failed: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"FIRMWARE_UPDATE_ERROR", [NSString stringWithFormat:@"Failed to start firmware update: %@", exception.reason], nil);
+    }
+}
+
+- (void)cancelFirmwareUpdate:(double)nodeAddress
+                    resolver:(RCTPromiseResolveBlock)resolve
+                    rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        [[SigMeshLib share] cancelFirmwareUpdate];
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"FIRMWARE_UPDATE_ERROR", [NSString stringWithFormat:@"Failed to cancel firmware update: %@", exception.reason], nil);
+    }
+}
+
+- (void)getFirmwareVersion:(double)nodeAddress
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 address = (UInt16)nodeAddress;
+
+        // Send firmware version get message
+        [[SDKLibCommand share] getFirmwareVersionWithDestination:address
+                                                      retryCount:2
+                                                 responseMaxCount:1
+                                                 successCallback:^(UInt16 source, UInt16 destination, SigFirmwareInformationStatus * _Nonnull responseMessage) {
+            NSString *version = responseMessage.firmwareID ?: @"Unknown";
+            resolve(version);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"FIRMWARE_VERSION_ERROR", [NSString stringWithFormat:@"Failed to get firmware version: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"FIRMWARE_VERSION_ERROR", [NSString stringWithFormat:@"Failed to get firmware version: %@", exception.reason], nil);
+    }
+}
+
+- (void)verifyFirmware:(double)nodeAddress
+          firmwareInfo:(NSDictionary *)firmwareInfo
+              resolver:(RCTPromiseResolveBlock)resolve
+              rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 address = (UInt16)nodeAddress;
+        NSString *firmwareData = firmwareInfo[@"data"];
+        NSString *expectedChecksum = firmwareInfo[@"checksum"];
+
+        if (!firmwareData || !expectedChecksum) {
+            reject(@"FIRMWARE_VERIFY_ERROR", @"Firmware data and checksum are required", nil);
+            return;
+        }
+
+        NSData *firmwareBytes = [LibTools nsstringToHex:firmwareData];
+
+        // Verify firmware using checksum
+        [[SDKLibCommand share] verifyFirmwareWithDestination:address
+                                                firmwareData:firmwareBytes
+                                           expectedChecksum:expectedChecksum
+                                                 retryCount:2
+                                            responseMaxCount:1
+                                             successCallback:^(BOOL isValid) {
+            resolve(@(isValid));
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"FIRMWARE_VERIFY_ERROR", [NSString stringWithFormat:@"Failed to verify firmware: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"FIRMWARE_VERIFY_ERROR", [NSString stringWithFormat:@"Failed to verify firmware: %@", exception.reason], nil);
+    }
+}
+
+// Phase 4: Network Health Monitoring
+- (void)startNetworkHealthMonitoring:(NSDictionary *)config
+                            resolver:(RCTPromiseResolveBlock)resolve
+                            rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        NSNumber *interval = config[@"interval"] ?: @30000; // 30 seconds default
+        BOOL includeRSSI = config[@"includeRSSI"] ? [config[@"includeRSSI"] boolValue] : YES;
+        BOOL includeLatency = config[@"includeLatency"] ? [config[@"includeLatency"] boolValue] : YES;
+
+        // Start periodic health monitoring
+        [[SigMeshLib share] startHealthMonitoringWithInterval:[interval doubleValue] / 1000.0
+                                                  includeRSSI:includeRSSI
+                                               includeLatency:includeLatency
+                                                 healthUpdate:^(NSDictionary * _Nonnull healthData) {
+            if (self.hasListeners) {
+                [self sendEventWithName:@"networkHealthUpdate" body:@{
+                    @"data": healthData
+                }];
+            }
+        }];
+
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"HEALTH_MONITORING_ERROR", [NSString stringWithFormat:@"Failed to start network health monitoring: %@", exception.reason], nil);
+    }
+}
+
+- (void)stopNetworkHealthMonitoring:(RCTPromiseResolveBlock)resolve
+                           rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        [[SigMeshLib share] stopHealthMonitoring];
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"HEALTH_MONITORING_ERROR", [NSString stringWithFormat:@"Failed to stop network health monitoring: %@", exception.reason], nil);
+    }
+}
+
+- (void)getNetworkHealthReport:(RCTPromiseResolveBlock)resolve
+                      rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        [[SigMeshLib share] getNetworkHealthReport:^(NSDictionary * _Nonnull report) {
+            resolve(report);
+        }];
+    } @catch (NSException *exception) {
+        reject(@"HEALTH_REPORT_ERROR", [NSString stringWithFormat:@"Failed to get network health report: %@", exception.reason], nil);
+    }
+}
+
+- (void)getNodeHealthStatus:(double)nodeAddress
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 address = (UInt16)nodeAddress;
+
+        [[SDKLibCommand share] getNodeHealthStatusWithDestination:address
+                                                       retryCount:2
+                                                  responseMaxCount:1
+                                                  successCallback:^(UInt16 source, UInt16 destination, NSDictionary * _Nonnull status) {
+            resolve(status);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"HEALTH_STATUS_ERROR", [NSString stringWithFormat:@"Failed to get node health status: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"HEALTH_STATUS_ERROR", [NSString stringWithFormat:@"Failed to get node health status: %@", exception.reason], nil);
+    }
+}
+
+- (void)getNetworkTopology:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        [[SigMeshLib share] getNetworkTopology:^(NSArray<NSDictionary *> * _Nonnull nodes) {
+            NSDictionary *topology = @{
+                @"nodes": nodes
+            };
+            resolve(topology);
+        }];
+    } @catch (NSException *exception) {
+        reject(@"TOPOLOGY_ERROR", [NSString stringWithFormat:@"Failed to get network topology: %@", exception.reason], nil);
+    }
+}
+
+- (void)measureNodeLatency:(double)nodeAddress
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 address = (UInt16)nodeAddress;
+        NSDate *startTime = [NSDate date];
+
+        // Send ping to node and measure response time
+        [[SDKLibCommand share] pingNodeWithDestination:address
+                                            retryCount:2
+                                       responseMaxCount:1
+                                       successCallback:^(UInt16 source, UInt16 destination) {
+            NSTimeInterval latency = [[NSDate date] timeIntervalSinceDate:startTime] * 1000; // Convert to ms
+            resolve(@(latency));
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"LATENCY_ERROR", [NSString stringWithFormat:@"Failed to measure latency: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"LATENCY_ERROR", [NSString stringWithFormat:@"Failed to measure node latency: %@", exception.reason], nil);
+    }
+}
+
+// Phase 4: Vendor-Specific Commands
+- (void)sendVendorCommand:(double)target
+                  command:(NSDictionary *)command
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 targetAddress = (UInt16)target;
+        NSNumber *opcode = command[@"opcode"];
+        NSNumber *companyId = command[@"companyId"];
+        NSString *parameters = command[@"parameters"] ?: @"";
+        BOOL acknowledged = command[@"acknowledged"] ? [command[@"acknowledged"] boolValue] : YES;
+
+        if (!opcode || !companyId) {
+            reject(@"VENDOR_COMMAND_ERROR", @"Opcode and company ID are required", nil);
+            return;
+        }
+
+        NSData *paramData = parameters.length > 0 ? [LibTools nsstringToHex:parameters] : [NSData data];
+
+        // Create vendor message
+        SigVendorMessage *vendorMessage = [[SigVendorMessage alloc] initWithOpcode:[opcode unsignedIntValue]
+                                                                          companyId:[companyId unsignedShortValue]
+                                                                         parameters:paramData];
+
+        if (acknowledged) {
+            [[SDKLibCommand share] sendVendorCommandWithDestination:targetAddress
+                                                      vendorMessage:vendorMessage
+                                                         retryCount:2
+                                                    responseMaxCount:1
+                                                    successCallback:^(UInt16 source, UInt16 destination, SigVendorMessage * _Nonnull responseMessage) {
+                NSDictionary *response = @{
+                    @"source": @(source),
+                    @"opcode": @(responseMessage.opcode),
+                    @"data": [LibTools convertDataToHexStr:responseMessage.parameters],
+                    @"success": @YES
+                };
+                resolve(response);
+            } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+                if (error) {
+                    reject(@"VENDOR_COMMAND_ERROR", [NSString stringWithFormat:@"No response received: %@", error.localizedDescription], error);
+                }
+            }];
+        } else {
+            // Unacknowledged - send and resolve immediately
+            [[SDKLibCommand share] sendVendorCommandUnacknowledgedWithDestination:targetAddress
+                                                                    vendorMessage:vendorMessage];
+            resolve(nil);
+        }
+
+    } @catch (NSException *exception) {
+        reject(@"VENDOR_COMMAND_ERROR", [NSString stringWithFormat:@"Failed to send vendor command: %@", exception.reason], nil);
+    }
+}
+
+- (void)getVendorModels:(double)nodeAddress
+               resolver:(RCTPromiseResolveBlock)resolve
+               rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 address = (UInt16)nodeAddress;
+
+        // Get composition data to extract vendor models
+        [[SDKLibCommand share] getCompositionDataWithDestination:address
+                                                      retryCount:2
+                                                 responseMaxCount:1
+                                                 successCallback:^(UInt16 source, UInt16 destination, SigConfigCompositionDataStatus * _Nonnull responseMessage) {
+            NSMutableArray *vendorModels = [NSMutableArray array];
+
+            for (SigElementModel *element in responseMessage.page0.elements) {
+                for (SigModelIDModel *model in element.sigModels) {
+                    if (model.isVendorModel) {
+                        NSDictionary *modelDict = @{
+                            @"companyId": @(model.companyId),
+                            @"modelId": @(model.modelId),
+                            @"elementAddress": @(element.address)
+                        };
+                        [vendorModels addObject:modelDict];
+                    }
+                }
+            }
+
+            resolve(vendorModels);
+        } resultCallback:^(BOOL isResponseAll, NSError * _Nullable error) {
+            if (error) {
+                reject(@"VENDOR_MODELS_ERROR", [NSString stringWithFormat:@"Failed to get vendor models: %@", error.localizedDescription], error);
+            }
+        }];
+
+    } @catch (NSException *exception) {
+        reject(@"VENDOR_MODELS_ERROR", [NSString stringWithFormat:@"Failed to get vendor models: %@", exception.reason], nil);
+    }
+}
+
+- (void)registerVendorMessageHandler:(double)companyId
+                            resolver:(RCTPromiseResolveBlock)resolve
+                            rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 company = (UInt16)companyId;
+
+        // Register handler for vendor messages
+        [[SigMeshLib share] registerVendorMessageHandlerForCompanyId:company
+                                                      messageHandler:^(UInt16 source, UInt16 opcode, NSData * _Nonnull data) {
+            if (self.hasListeners) {
+                [self sendEventWithName:@"vendorMessageReceived" body:@{
+                    @"companyId": @(company),
+                    @"source": @(source),
+                    @"opcode": @(opcode),
+                    @"data": [LibTools convertDataToHexStr:data]
+                }];
+            }
+        }];
+
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"VENDOR_HANDLER_ERROR", [NSString stringWithFormat:@"Failed to register vendor message handler: %@", exception.reason], nil);
+    }
+}
+
+- (void)unregisterVendorMessageHandler:(double)companyId
+                              resolver:(RCTPromiseResolveBlock)resolve
+                              rejecter:(RCTPromiseRejectBlock)reject
+{
+    @try {
+        UInt16 company = (UInt16)companyId;
+        [[SigMeshLib share] unregisterVendorMessageHandlerForCompanyId:company];
+        resolve(nil);
+    } @catch (NSException *exception) {
+        reject(@"VENDOR_HANDLER_ERROR", [NSString stringWithFormat:@"Failed to unregister vendor message handler: %@", exception.reason], nil);
+    }
+}
+
 // Utility methods
 - (void)checkBluetoothPermission:(RCTPromiseResolveBlock)resolve
                         rejecter:(RCTPromiseRejectBlock)reject
