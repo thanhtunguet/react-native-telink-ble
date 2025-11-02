@@ -9,16 +9,36 @@ import type {
   MeshNode,
   MeshEventType,
   TelinkErrorDetails,
+  RemoteProvisionConfig,
+  RemoteProvisionResult,
+  FirmwareUpdateConfig,
+  FirmwareInfo,
+  NetworkHealthConfig,
+  NetworkHealthReport,
+  NodeHealthStatus,
+  NetworkTopology,
+  VendorCommand,
+  VendorCommandResponse,
+  VendorModelInfo,
 } from './types';
 import { TelinkErrorCode } from './types';
 
 // Export all types
 export * from './types';
 
-// Export helper classes
+// Export Phase 1-3 helper classes
 export { ProvisioningWorkflow } from './ProvisioningWorkflow';
 export { DeviceController } from './DeviceController';
 export { GroupManager } from './GroupManager';
+
+// Export Phase 4 helper classes
+export { RemoteProvisioningManager } from './RemoteProvisioningManager';
+export { FirmwareUpdateManager } from './FirmwareUpdateManager';
+export { NetworkHealthMonitor } from './NetworkHealthMonitor';
+export {
+  VendorCommandManager,
+  VendorCommandHelpers,
+} from './VendorCommandManager';
 
 // Event emitter for native events
 const eventEmitter = new NativeEventEmitter(NativeModules.TelinkBle);
@@ -303,6 +323,149 @@ class TelinkBle {
   async isBluetoothEnabled(): Promise<boolean> {
     try {
       return await TelinkBleNative.isBluetoothEnabled();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  // Phase 4: Remote Provisioning
+  async startRemoteProvisioning(
+    device: DiscoveredDevice,
+    config: RemoteProvisionConfig
+  ): Promise<RemoteProvisionResult> {
+    try {
+      return await TelinkBleNative.startRemoteProvisioning(device, config);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async cancelRemoteProvisioning(): Promise<void> {
+    try {
+      await TelinkBleNative.cancelRemoteProvisioning();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  // Phase 4: Firmware Update (OTA)
+  async startFirmwareUpdate(config: FirmwareUpdateConfig): Promise<void> {
+    try {
+      await TelinkBleNative.startFirmwareUpdate(config);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async cancelFirmwareUpdate(nodeAddress: number): Promise<void> {
+    try {
+      await TelinkBleNative.cancelFirmwareUpdate(nodeAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async getFirmwareVersion(nodeAddress: number): Promise<string> {
+    try {
+      return await TelinkBleNative.getFirmwareVersion(nodeAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async verifyFirmware(
+    nodeAddress: number,
+    firmwareInfo: FirmwareInfo
+  ): Promise<boolean> {
+    try {
+      return await TelinkBleNative.verifyFirmware(nodeAddress, firmwareInfo);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  // Phase 4: Network Health Monitoring
+  async startNetworkHealthMonitoring(
+    config: NetworkHealthConfig
+  ): Promise<void> {
+    try {
+      await TelinkBleNative.startNetworkHealthMonitoring(config);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async stopNetworkHealthMonitoring(): Promise<void> {
+    try {
+      await TelinkBleNative.stopNetworkHealthMonitoring();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async getNetworkHealthReport(): Promise<NetworkHealthReport> {
+    try {
+      return await TelinkBleNative.getNetworkHealthReport();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async getNodeHealthStatus(nodeAddress: number): Promise<NodeHealthStatus> {
+    try {
+      return await TelinkBleNative.getNodeHealthStatus(nodeAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async getNetworkTopology(): Promise<NetworkTopology> {
+    try {
+      return await TelinkBleNative.getNetworkTopology();
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async measureNodeLatency(nodeAddress: number): Promise<number> {
+    try {
+      return await TelinkBleNative.measureNodeLatency(nodeAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  // Phase 4: Vendor-Specific Commands
+  async sendVendorCommand(
+    target: number,
+    command: VendorCommand
+  ): Promise<VendorCommandResponse | null> {
+    try {
+      return await TelinkBleNative.sendVendorCommand(target, command);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async getVendorModels(nodeAddress: number): Promise<VendorModelInfo[]> {
+    try {
+      return await TelinkBleNative.getVendorModels(nodeAddress);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async registerVendorMessageHandler(companyId: number): Promise<void> {
+    try {
+      await TelinkBleNative.registerVendorMessageHandler(companyId);
+    } catch (error) {
+      throw this.handleNativeError(error);
+    }
+  }
+
+  async unregisterVendorMessageHandler(companyId: number): Promise<void> {
+    try {
+      await TelinkBleNative.unregisterVendorMessageHandler(companyId);
     } catch (error) {
       throw this.handleNativeError(error);
     }

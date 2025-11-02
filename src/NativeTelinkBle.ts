@@ -6,6 +6,17 @@ import type {
   ProvisionConfig,
   ProvisionResult,
   MeshNode,
+  RemoteProvisionConfig,
+  RemoteProvisionResult,
+  FirmwareUpdateConfig,
+  FirmwareInfo,
+  NetworkHealthConfig,
+  NetworkHealthReport,
+  NodeHealthStatus,
+  NetworkTopology,
+  VendorCommand,
+  VendorCommandResponse,
+  VendorModelInfo,
 } from './types';
 
 export interface Spec extends TurboModule {
@@ -80,6 +91,39 @@ export interface Spec extends TurboModule {
   checkBluetoothPermission(): Promise<boolean>;
   requestBluetoothPermission(): Promise<boolean>;
   isBluetoothEnabled(): Promise<boolean>;
+
+  // Phase 4: Remote Provisioning
+  startRemoteProvisioning(
+    device: DiscoveredDevice,
+    config: RemoteProvisionConfig
+  ): Promise<RemoteProvisionResult>;
+  cancelRemoteProvisioning(): Promise<void>;
+
+  // Phase 4: Firmware Update (OTA)
+  startFirmwareUpdate(config: FirmwareUpdateConfig): Promise<void>;
+  cancelFirmwareUpdate(nodeAddress: number): Promise<void>;
+  getFirmwareVersion(nodeAddress: number): Promise<string>;
+  verifyFirmware(
+    nodeAddress: number,
+    firmwareInfo: FirmwareInfo
+  ): Promise<boolean>;
+
+  // Phase 4: Network Health Monitoring
+  startNetworkHealthMonitoring(config: NetworkHealthConfig): Promise<void>;
+  stopNetworkHealthMonitoring(): Promise<void>;
+  getNetworkHealthReport(): Promise<NetworkHealthReport>;
+  getNodeHealthStatus(nodeAddress: number): Promise<NodeHealthStatus>;
+  getNetworkTopology(): Promise<NetworkTopology>;
+  measureNodeLatency(nodeAddress: number): Promise<number>;
+
+  // Phase 4: Vendor-Specific Commands
+  sendVendorCommand(
+    target: number,
+    command: VendorCommand
+  ): Promise<VendorCommandResponse | null>;
+  getVendorModels(nodeAddress: number): Promise<VendorModelInfo[]>;
+  registerVendorMessageHandler(companyId: number): Promise<void>;
+  unregisterVendorMessageHandler(companyId: number): Promise<void>;
 
   // Add event listener support (these will be handled by EventEmitter in the main module)
   addListener(eventName: string): void;

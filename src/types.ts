@@ -254,13 +254,27 @@ export interface TelinkErrorDetails {
   timestamp: Date;
 }
 
-// Firmware update types
-export interface UpdateProgress {
+// Phase 4: Remote Provisioning types
+export interface RemoteProvisionConfig extends ProvisionConfig {
+  proxyNodeAddress: number; // Address of the proxy node to use
+  timeout?: number; // Timeout in milliseconds
+}
+
+export interface RemoteProvisionResult extends ProvisionResult {
+  proxyNodeAddress: number;
+  provisioningTime: number; // Time taken in milliseconds
+}
+
+// Phase 4: Firmware update types
+export interface FirmwareUpdateConfig {
   nodeAddress: number;
-  percentage: number;
-  stage: string;
-  bytesTransferred: number;
-  totalBytes: number;
+  firmwareData: string; // Base64 encoded firmware data or file path
+  firmwareInfo: FirmwareInfo;
+  metadata?: {
+    updatePolicy?: 'verify-and-apply' | 'verify-only' | 'force-apply';
+    chunkSize?: number; // Bytes per chunk
+    transferMode?: 'reliable' | 'fast';
+  };
 }
 
 export interface FirmwareInfo {
@@ -269,4 +283,142 @@ export interface FirmwareInfo {
   firmwareId: number;
   size: number;
   checksum: string;
+  releaseDate?: string;
+  minimumRequiredVersion?: string;
 }
+
+export interface FirmwareUpdateProgress {
+  nodeAddress: number;
+  percentage: number;
+  stage: FirmwareUpdateStage;
+  bytesTransferred: number;
+  totalBytes: number;
+  estimatedTimeRemaining?: number; // Seconds
+  transferRate?: number; // Bytes per second
+  error?: string;
+}
+
+export enum FirmwareUpdateStage {
+  PREPARING = 'preparing',
+  VERIFYING = 'verifying',
+  TRANSFERRING = 'transferring',
+  APPLYING = 'applying',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+export interface FirmwareUpdateResult {
+  success: boolean;
+  nodeAddress: number;
+  previousVersion: string;
+  newVersion: string;
+  duration: number; // Milliseconds
+  error?: string;
+}
+
+// Phase 4: Network health monitoring types
+export interface NetworkHealthConfig {
+  checkInterval?: number; // Milliseconds
+  includeRssi?: boolean;
+  includeHops?: boolean;
+  includeLatency?: boolean;
+  nodeAddresses?: number[]; // Specific nodes to monitor, or all if empty
+}
+
+export interface NetworkHealthReport {
+  timestamp: Date;
+  totalNodes: number;
+  activeNodes: number;
+  averageRssi: number;
+  averageLatency: number; // Milliseconds
+  networkReliability: number; // 0-100 percentage
+  nodes: NodeHealthStatus[];
+  topology?: NetworkTopology;
+}
+
+export interface NodeHealthStatus {
+  nodeAddress: number;
+  isOnline: boolean;
+  rssi: number;
+  latency: number; // Milliseconds
+  hopCount: number;
+  lastSeen: Date;
+  batteryLevel?: number;
+  packetLossRate: number; // 0-100 percentage
+}
+
+export interface NetworkTopology {
+  nodes: TopologyNode[];
+  connections: TopologyConnection[];
+}
+
+export interface TopologyNode {
+  address: number;
+  type: 'provisioner' | 'relay' | 'low-power' | 'friend';
+  isRelay: boolean;
+  isProxy: boolean;
+  isFriend: boolean;
+  isLowPower: boolean;
+}
+
+export interface TopologyConnection {
+  fromAddress: number;
+  toAddress: number;
+  rssi: number;
+  quality: number; // 0-100 percentage
+}
+
+// Phase 4: Vendor-specific command types
+export interface VendorCommand {
+  companyId: number;
+  opcode: number;
+  parameters: number[]; // Command-specific parameters
+  acknowledged?: boolean;
+  timeout?: number;
+}
+
+export interface VendorCommandResponse {
+  companyId: number;
+  opcode: number;
+  sourceAddress: number;
+  data: number[];
+  timestamp: Date;
+}
+
+export interface VendorModelInfo {
+  companyId: number;
+  modelId: number;
+  supportedOpcodes: number[];
+  description?: string;
+}
+
+// Phase 4: Additional event types for Phase 4 features
+export enum Phase4EventType {
+  // Remote provisioning events
+  REMOTE_PROVISIONING_STARTED = 'remoteProvisioningStarted',
+  REMOTE_PROVISIONING_PROGRESS = 'remoteProvisioningProgress',
+  REMOTE_PROVISIONING_COMPLETED = 'remoteProvisioningCompleted',
+  REMOTE_PROVISIONING_FAILED = 'remoteProvisioningFailed',
+
+  // Firmware update events
+  FIRMWARE_UPDATE_STARTED = 'firmwareUpdateStarted',
+  FIRMWARE_UPDATE_PROGRESS = 'firmwareUpdateProgress',
+  FIRMWARE_UPDATE_COMPLETED = 'firmwareUpdateCompleted',
+  FIRMWARE_UPDATE_FAILED = 'firmwareUpdateFailed',
+  FIRMWARE_VERIFICATION_COMPLETED = 'firmwareVerificationCompleted',
+
+  // Network health events
+  NETWORK_HEALTH_UPDATED = 'networkHealthUpdated',
+  NODE_HEALTH_CHANGED = 'nodeHealthChanged',
+  NETWORK_TOPOLOGY_CHANGED = 'networkTopologyChanged',
+
+  // Vendor command events
+  VENDOR_MESSAGE_RECEIVED = 'vendorMessageReceived',
+  VENDOR_COMMAND_RESPONSE = 'vendorCommandResponse',
+}
+
+// Extend main MeshEventType with Phase 4 events
+export const AllMeshEventTypes = {
+  ...MeshEventType,
+  ...Phase4EventType,
+};
