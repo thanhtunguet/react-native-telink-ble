@@ -13,9 +13,11 @@ Pod::Spec.new do |s|
   s.platforms    = { :ios => min_ios_version_supported }
   s.source       = { :git => "https://github.com/thanhtunguet/react-native-telink-ble.git", :tag => "#{s.version}" }
 
-  s.source_files = "ios/**/*.{h,m,mm,cpp}"
+  s.source_files = "ios/**/*.{h,m,mm,cpp}", "TelinkSigMeshLib/TelinkSigMeshLib/**/*.{h,m,mm}"
   s.private_header_files = "ios/**/*.h"
+  s.public_header_files = "TelinkSigMeshLib/TelinkSigMeshLib/**/*.h"
 
+  s.dependency "OpenSSL-Universal", "~> 1.1.180"
 
   install_modules_dependencies(s)
 end

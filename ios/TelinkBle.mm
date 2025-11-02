@@ -1,6 +1,8 @@
 #import "TelinkBle.h"
+#import <TelinkSigMeshLib/TelinkSigMeshLib.h>
 
 @implementation TelinkBle
+
 - (NSNumber *)multiply:(double)a b:(double)b {
     NSNumber *result = @(a * b);
 

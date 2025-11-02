@@ -3,4 +3,6 @@ plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'telinkble.example'
 include ':app'
+include ':TelinkBleMeshLib'
+project(':TelinkBleMeshLib').projectDir = new File(rootProject.projectDir, '../../TelinkBleMeshLib')
 includeBuild('../node_modules/@react-native/gradle-plugin')
