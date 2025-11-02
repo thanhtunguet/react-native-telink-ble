@@ -319,16 +319,23 @@ const commands = [
   { type: 'color', target: 0x0003, value: { hue: 180, saturation: 90, lightness: 60 } }
 ];
 
-const results = await controller.executeBatchCommands(commands);
+await controller.executeBatch(commands, 150);
+
+// Customise scheduling if you need higher throughput
+// (Requires importing MeshCommandScheduler from the package)
+const tunedController = new DeviceController({
+  scheduler: new MeshCommandScheduler({ concurrency: 4, minIntervalMs: 15 }),
+});
 ```
 
 ### Network Health Monitoring
 
 ```typescript
 // Monitor network health
-const healthReport = await networkManager.performNetworkAnalysis();
-console.log(`Network has ${healthReport.activeNodes}/${healthReport.totalNodes} active nodes`);
-console.log(`Average latency: ${healthReport.networkLatency}ms`);
+const summary = await networkManager.generateSummaryReport();
+console.log(`Network has ${summary.activeNodes}/${summary.totalNodes} active nodes`);
+console.log(`Average latency: ${summary.averageLatency}ms`);
+console.log(`Overall health: ${summary.overallHealth}`);
 ```
 
 ### Error Handling
@@ -337,6 +344,10 @@ console.log(`Average latency: ${healthReport.networkLatency}ms`);
 import { TelinkError, TelinkErrorCode, ErrorRecoveryManager } from 'react-native-telink-ble';
 
 const recovery = new ErrorRecoveryManager();
+recovery.setNetworkStateLoader(async () => {
+  // Retrieve a previously persisted mesh state snapshot
+  return await loadMeshStateFromStorage();
+});
 
 try {
   await controller.setDeviceState(0x0001, true);
@@ -356,11 +367,11 @@ try {
 }
 
 // Automatic retry with exponential backoff
-const result = await recovery.withRetry(
-  () => controller.setDeviceState(0x0001, true),
-  3, // max retries
-  1000 // base delay ms
-);
+await recovery.withRetry(() => controller.setDeviceState(0x0001, true), {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  jitterMs: 0,
+});
 ```
 
 ## Firmware Updates

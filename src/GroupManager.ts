@@ -1,5 +1,17 @@
 import telinkBle from './index';
+import { ErrorRecoveryManager, TelinkError } from './errors';
+import {
+  MeshCommandScheduler,
+  type MeshCommandSchedulerOptions,
+} from './helpers/MeshCommandScheduler';
 import type { MeshGroup, ColorHSL, ControlOptions } from './types';
+import { TelinkErrorCode } from './types';
+
+export interface GroupManagerOptions {
+  scheduler?: MeshCommandScheduler;
+  schedulerOptions?: MeshCommandSchedulerOptions;
+  recoveryManager?: ErrorRecoveryManager;
+}
 
 /**
  * High-level group management helper class
@@ -7,6 +19,49 @@ import type { MeshGroup, ColorHSL, ControlOptions } from './types';
  */
 export class GroupManager {
   private groups: Map<number, MeshGroup> = new Map();
+  private readonly scheduler: MeshCommandScheduler;
+  private readonly recovery: ErrorRecoveryManager;
+
+  constructor(options: GroupManagerOptions = {}) {
+    this.scheduler =
+      options.scheduler ??
+      new MeshCommandScheduler({
+        concurrency: options.schedulerOptions?.concurrency ?? 2,
+        minIntervalMs: options.schedulerOptions?.minIntervalMs ?? 20,
+        maxQueueSize: options.schedulerOptions?.maxQueueSize,
+        defaultTimeoutMs: options.schedulerOptions?.defaultTimeoutMs ?? 15000,
+      });
+    this.recovery = options.recoveryManager ?? new ErrorRecoveryManager();
+  }
+
+  private dispatchCommand<T>(
+    operation: () => Promise<T>,
+    options?: ControlOptions
+  ): Promise<T> {
+    const schedule = () =>
+      this.scheduler.schedule(
+        async () => {
+          if (options?.delay && options.delay > 0) {
+            await this.delay(options.delay);
+          }
+          return operation();
+        },
+        {
+          priority: options?.priority,
+          timeoutMs: options?.timeout,
+        }
+      );
+
+    if (options?.retries && options.retries > 0) {
+      return this.recovery.withRetry(
+        schedule,
+        options.retries,
+        options.delay ?? 200
+      );
+    }
+
+    return schedule();
+  }
 
   /**
    * Create a new group
@@ -14,7 +69,7 @@ export class GroupManager {
    * @param name Group name
    */
   async createGroup(groupAddress: number, name: string): Promise<MeshGroup> {
-    await telinkBle.createGroup(groupAddress, name);
+    await this.dispatchCommand(() => telinkBle.createGroup(groupAddress, name));
 
     const group: MeshGroup = {
       address: groupAddress,
@@ -35,7 +90,9 @@ export class GroupManager {
     nodeAddress: number,
     groupAddress: number
   ): Promise<void> {
-    await telinkBle.addDeviceToGroup(nodeAddress, groupAddress);
+    await this.dispatchCommand(() =>
+      telinkBle.addDeviceToGroup(nodeAddress, groupAddress)
+    );
 
     // Update local tracking
     const group = this.groups.get(groupAddress);
@@ -53,7 +110,9 @@ export class GroupManager {
     nodeAddress: number,
     groupAddress: number
   ): Promise<void> {
-    await telinkBle.removeDeviceFromGroup(nodeAddress, groupAddress);
+    await this.dispatchCommand(() =>
+      telinkBle.removeDeviceFromGroup(nodeAddress, groupAddress)
+    );
 
     // Update local tracking
     const group = this.groups.get(groupAddress);
@@ -101,10 +160,10 @@ export class GroupManager {
     isOn: boolean,
     options?: ControlOptions
   ): Promise<void> {
-    await telinkBle.sendGroupCommand(
-      groupAddress,
-      isOn,
-      options?.transitionTime
+    await this.dispatchCommand(
+      () =>
+        telinkBle.sendGroupCommand(groupAddress, isOn, options?.transitionTime),
+      options
     );
   }
 
@@ -120,10 +179,14 @@ export class GroupManager {
     options?: ControlOptions
   ): Promise<void> {
     // Send to group address
-    await telinkBle.sendGenericLevel(
-      groupAddress,
-      level,
-      options?.transitionTime
+    await this.dispatchCommand(
+      () =>
+        telinkBle.sendGenericLevel(
+          groupAddress,
+          level,
+          options?.transitionTime
+        ),
+      options
     );
   }
 
@@ -138,12 +201,16 @@ export class GroupManager {
     color: ColorHSL,
     options?: ControlOptions
   ): Promise<void> {
-    await telinkBle.sendColorHSL(
-      groupAddress,
-      color.hue,
-      color.saturation,
-      color.lightness,
-      options?.transitionTime
+    await this.dispatchCommand(
+      () =>
+        telinkBle.sendColorHSL(
+          groupAddress,
+          color.hue,
+          color.saturation,
+          color.lightness,
+          options?.transitionTime
+        ),
+      options
     );
   }
 
@@ -155,12 +222,18 @@ export class GroupManager {
   async storeGroupScene(groupAddress: number, sceneId: number): Promise<void> {
     const group = this.groups.get(groupAddress);
     if (!group) {
-      throw new Error(`Group ${groupAddress} not found`);
+      throw new TelinkError(
+        TelinkErrorCode.INVALID_ADDRESS,
+        `Group ${groupAddress} not found`,
+        { context: { groupAddress } }
+      );
     }
 
     // Store scene on all devices in group
     for (const deviceAddr of group.devices) {
-      await telinkBle.sendSceneStore(deviceAddr, sceneId);
+      await this.dispatchCommand(() =>
+        telinkBle.sendSceneStore(deviceAddr, sceneId)
+      );
     }
   }
 
@@ -170,7 +243,9 @@ export class GroupManager {
    * @param sceneId Scene identifier
    */
   async recallGroupScene(groupAddress: number, sceneId: number): Promise<void> {
-    await telinkBle.sendSceneRecall(groupAddress, sceneId);
+    await this.dispatchCommand(() =>
+      telinkBle.sendSceneRecall(groupAddress, sceneId)
+    );
   }
 
   /**
@@ -181,12 +256,18 @@ export class GroupManager {
   async deleteGroupScene(groupAddress: number, sceneId: number): Promise<void> {
     const group = this.groups.get(groupAddress);
     if (!group) {
-      throw new Error(`Group ${groupAddress} not found`);
+      throw new TelinkError(
+        TelinkErrorCode.INVALID_ADDRESS,
+        `Group ${groupAddress} not found`,
+        { context: { groupAddress } }
+      );
     }
 
     // Delete scene from all devices in group
     for (const deviceAddr of group.devices) {
-      await telinkBle.sendSceneDelete(deviceAddr, sceneId);
+      await this.dispatchCommand(() =>
+        telinkBle.sendSceneDelete(deviceAddr, sceneId)
+      );
     }
   }
 
@@ -341,6 +422,10 @@ export class GroupManager {
   isDeviceInGroup(nodeAddress: number, groupAddress: number): boolean {
     const group = this.groups.get(groupAddress);
     return group ? group.devices.includes(nodeAddress) : false;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

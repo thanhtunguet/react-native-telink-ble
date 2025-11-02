@@ -8,7 +8,6 @@ import type {
   ProvisionResult,
   MeshNode,
   MeshEventType,
-  TelinkErrorDetails,
   RemoteProvisionConfig,
   RemoteProvisionResult,
   FirmwareUpdateConfig,
@@ -22,6 +21,7 @@ import type {
   VendorModelInfo,
 } from './types';
 import { TelinkErrorCode } from './types';
+import { TelinkError, registerTelinkProvider } from './errors';
 
 // Export all types
 export * from './types';
@@ -39,6 +39,12 @@ export {
   VendorCommandManager,
   VendorCommandHelpers,
 } from './VendorCommandManager';
+export { TelinkError, ErrorRecoveryManager } from './errors';
+export {
+  MeshCommandScheduler,
+  type MeshCommandSchedulerOptions,
+  type ScheduleOptions,
+} from './helpers/MeshCommandScheduler';
 
 // Event emitter for native events
 const eventEmitter = new NativeEventEmitter(NativeModules.TelinkBle);
@@ -506,21 +512,33 @@ class TelinkBle {
   }
 
   // Error handling helper
-  private handleNativeError(error: any): Error {
-    if (error && typeof error === 'object') {
-      const errorDetails: TelinkErrorDetails = {
-        code: this.mapErrorCode(error.code || 'UNKNOWN_ERROR'),
-        message: error.message || 'An unknown error occurred',
-        nativeError: error,
-        timestamp: new Date(),
-      };
-
-      const customError = new Error(errorDetails.message);
-      (customError as any).details = errorDetails;
-      return customError;
+  private handleNativeError(error: unknown): TelinkError {
+    if (error instanceof TelinkError) {
+      return error;
     }
 
-    return new Error(error?.toString() || 'An unknown error occurred');
+    const nativeError =
+      error && typeof error === 'object'
+        ? (error as Record<string, unknown>)
+        : undefined;
+
+    const message =
+      (nativeError?.message as string | undefined) ??
+      (typeof error === 'string' ? error : 'An unknown error occurred');
+
+    const code = this.mapErrorCode(
+      (nativeError?.code as string | undefined) ?? 'UNKNOWN_ERROR'
+    );
+
+    return new TelinkError(code, message, {
+      nativeError: error,
+      timestamp: new Date(),
+      retryable: this.isRetryableCode(code),
+      context:
+        nativeError && typeof nativeError === 'object'
+          ? { ...nativeError }
+          : undefined,
+    });
   }
 
   private mapErrorCode(nativeCode: string): TelinkErrorCode {
@@ -539,10 +557,22 @@ class TelinkBle {
 
     return codeMap[nativeCode] || TelinkErrorCode.UNKNOWN_ERROR;
   }
+
+  private isRetryableCode(code: TelinkErrorCode): boolean {
+    switch (code) {
+      case TelinkErrorCode.CONNECTION_FAILED:
+      case TelinkErrorCode.CONNECTION_TIMEOUT:
+      case TelinkErrorCode.COMMAND_TIMEOUT:
+        return true;
+      default:
+        return false;
+    }
+  }
 }
 
 // Export singleton instance
 const telinkBle = TelinkBle.getInstance();
+registerTelinkProvider(() => telinkBle);
 export default telinkBle;
 
 // Also export the class for advanced usage

@@ -102,6 +102,7 @@ export interface ControlOptions {
   acknowledged?: boolean;
   retries?: number;
   timeout?: number;
+  priority?: number;
 }
 
 export interface ColorHSL {
@@ -207,14 +208,6 @@ export interface NetworkEvent {
   details?: any;
 }
 
-export interface NetworkHealthReport {
-  totalNodes: number;
-  activeNodes: number;
-  networkLatency: number;
-  signalStrength: number[];
-  lastUpdated: Date;
-}
-
 // Error handling
 export enum TelinkErrorCode {
   // Bluetooth/Connection errors
@@ -252,6 +245,8 @@ export interface TelinkErrorDetails {
   message: string;
   nativeError?: any;
   timestamp: Date;
+  context?: Record<string, unknown>;
+  retryable?: boolean;
 }
 
 // Phase 4: Remote Provisioning types

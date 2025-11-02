@@ -1,11 +1,66 @@
 import telinkBle from './index';
+import { ErrorRecoveryManager } from './errors';
+import {
+  MeshCommandScheduler,
+  type MeshCommandSchedulerOptions,
+} from './helpers/MeshCommandScheduler';
 import type { ColorHSL, ControlOptions, SceneDevice } from './types';
+
+export interface DeviceControllerOptions {
+  scheduler?: MeshCommandScheduler;
+  schedulerOptions?: MeshCommandSchedulerOptions;
+  recoveryManager?: ErrorRecoveryManager;
+}
 
 /**
  * High-level device control helper class
  * Provides convenient methods for controlling BLE mesh devices
  */
 export class DeviceController {
+  private readonly scheduler: MeshCommandScheduler;
+  private readonly recovery: ErrorRecoveryManager;
+
+  constructor(options: DeviceControllerOptions = {}) {
+    this.scheduler =
+      options.scheduler ??
+      new MeshCommandScheduler({
+        concurrency: options.schedulerOptions?.concurrency ?? 3,
+        minIntervalMs: options.schedulerOptions?.minIntervalMs ?? 20,
+        maxQueueSize: options.schedulerOptions?.maxQueueSize,
+        defaultTimeoutMs: options.schedulerOptions?.defaultTimeoutMs ?? 15000,
+      });
+    this.recovery = options.recoveryManager ?? new ErrorRecoveryManager();
+  }
+
+  private dispatchCommand<T>(
+    operation: () => Promise<T>,
+    options?: ControlOptions
+  ): Promise<T> {
+    const schedule = () =>
+      this.scheduler.schedule(
+        async () => {
+          if (options?.delay && options.delay > 0) {
+            await this.delay(options.delay);
+          }
+          return operation();
+        },
+        {
+          priority: options?.priority,
+          timeoutMs: options?.timeout,
+        }
+      );
+
+    if (options?.retries && options.retries > 0) {
+      return this.recovery.withRetry(
+        schedule,
+        options.retries,
+        options.delay ?? 200
+      );
+    }
+
+    return schedule();
+  }
+
   /**
    * Turn device(s) on or off
    * @param target Single address or array of addresses
@@ -21,7 +76,10 @@ export class DeviceController {
 
     await Promise.all(
       addresses.map((addr) =>
-        telinkBle.sendGenericOnOff(addr, isOn, options?.transitionTime)
+        this.dispatchCommand(
+          () => telinkBle.sendGenericOnOff(addr, isOn, options?.transitionTime),
+          options
+        )
       )
     );
   }
@@ -42,10 +100,14 @@ export class DeviceController {
 
     await Promise.all(
       addresses.map((addr) =>
-        telinkBle.sendGenericLevel(
-          addr,
-          normalizedLevel,
-          options?.transitionTime
+        this.dispatchCommand(
+          () =>
+            telinkBle.sendGenericLevel(
+              addr,
+              normalizedLevel,
+              options?.transitionTime
+            ),
+          options
         )
       )
     );
@@ -66,12 +128,16 @@ export class DeviceController {
 
     await Promise.all(
       addresses.map((addr) =>
-        telinkBle.sendColorHSL(
-          addr,
-          color.hue,
-          color.saturation,
-          color.lightness,
-          options?.transitionTime
+        this.dispatchCommand(
+          () =>
+            telinkBle.sendColorHSL(
+              addr,
+              color.hue,
+              color.saturation,
+              color.lightness,
+              options?.transitionTime
+            ),
+          options
         )
       )
     );
@@ -88,10 +154,10 @@ export class DeviceController {
     isOn: boolean,
     options?: ControlOptions
   ): Promise<void> {
-    await telinkBle.sendGroupCommand(
-      groupAddress,
-      isOn,
-      options?.transitionTime
+    await this.dispatchCommand(
+      () =>
+        telinkBle.sendGroupCommand(groupAddress, isOn, options?.transitionTime),
+      options
     );
   }
 
@@ -104,7 +170,7 @@ export class DeviceController {
     const addresses = Array.isArray(devices) ? devices : [devices];
 
     for (const addr of addresses) {
-      await telinkBle.sendSceneStore(addr, sceneId);
+      await this.dispatchCommand(() => telinkBle.sendSceneStore(addr, sceneId));
     }
   }
 
@@ -117,7 +183,9 @@ export class DeviceController {
     const addresses = Array.isArray(target) ? target : [target];
 
     await Promise.all(
-      addresses.map((addr) => telinkBle.sendSceneRecall(addr, sceneId))
+      addresses.map((addr) =>
+        this.dispatchCommand(() => telinkBle.sendSceneRecall(addr, sceneId))
+      )
     );
   }
 
@@ -130,7 +198,9 @@ export class DeviceController {
     const addresses = Array.isArray(target) ? target : [target];
 
     await Promise.all(
-      addresses.map((addr) => telinkBle.sendSceneDelete(addr, sceneId))
+      addresses.map((addr) =>
+        this.dispatchCommand(() => telinkBle.sendSceneDelete(addr, sceneId))
+      )
     );
   }
 
@@ -152,25 +222,30 @@ export class DeviceController {
     // Set each device to desired state
     for (const device of devices) {
       if (device.onOff !== undefined) {
-        await telinkBle.sendGenericOnOff(device.address, device.onOff, 0);
+        const onOff = device.onOff;
+        await this.dispatchCommand(() =>
+          telinkBle.sendGenericOnOff(device.address, onOff, 0)
+        );
       }
 
       if (device.level !== undefined) {
-        await telinkBle.sendGenericLevel(device.address, device.level, 0);
+        const levelValue = device.level;
+        await this.dispatchCommand(() =>
+          telinkBle.sendGenericLevel(device.address, levelValue, 0)
+        );
       }
 
       if (device.color) {
-        await telinkBle.sendColorHSL(
-          device.address,
-          device.color.hue,
-          device.color.saturation,
-          device.color.lightness,
-          0
+        const { hue, saturation, lightness } = device.color;
+        await this.dispatchCommand(() =>
+          telinkBle.sendColorHSL(device.address, hue, saturation, lightness, 0)
         );
       }
 
       // Store the scene on this device
-      await telinkBle.sendSceneStore(device.address, sceneId);
+      await this.dispatchCommand(() =>
+        telinkBle.sendSceneStore(device.address, sceneId)
+      );
     }
   }
 
