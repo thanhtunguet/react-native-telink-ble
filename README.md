@@ -37,6 +37,13 @@ A comprehensive React Native library for Telink BLE mesh networking, providing s
 - Connection recovery strategies
 - Type-safe error handling
 
+⚛️ **React Hooks & Context** (NEW)
+- 8 specialized React Hooks for easy integration
+- Global state management with TelinkMeshProvider
+- TypeScript support with full type inference
+- Event-driven real-time updates
+- Production-ready hooks for all mesh operations
+
 ## Installation
 
 ```bash
@@ -123,6 +130,98 @@ const controller = new DeviceController();
 await controller.setDeviceState(meshNode.unicastAddress, true); // Turn on
 await controller.setDeviceLevel(meshNode.unicastAddress, 50);   // 50% brightness
 ```
+
+## React Hooks Usage (Recommended)
+
+For React applications, we recommend using the built-in hooks for easier integration:
+
+```typescript
+import React from 'react';
+import {
+  TelinkMeshProvider,
+  useScanning,
+  useDeviceControl,
+  useGroups,
+  useProvisioning,
+  useNetworkHealth,
+} from 'react-native-telink-ble';
+
+// Wrap your app with the provider
+function App() {
+  return (
+    <TelinkMeshProvider
+      autoInitialize={true}
+      initialConfig={{
+        networkName: 'MyNetwork',
+        networkKey: '7dd7364cd842ad18c17c2b820c84c3d6',
+        appKey: '63964771734fbd76e3b40519d1d94a48',
+        ivIndex: 0,
+        sequenceNumber: 0,
+      }}
+      autoStartHealthMonitoring={true}
+    >
+      <DeviceController />
+    </TelinkMeshProvider>
+  );
+}
+
+// Use hooks in your components
+function DeviceController() {
+  // Device scanning
+  const { isScanning, discoveredDevices, startScanning, stopScanning } = useScanning({
+    filters: { rssiThreshold: -70 },
+    autoStopAfter: 30000,
+  });
+
+  // Device control
+  const { turnOn, turnOff, setLevel } = useDeviceControl();
+
+  // Group management
+  const { groups, createGroup, turnOnGroup } = useGroups({ autoLoad: true });
+
+  // Provisioning
+  const { provisionDevice, isProvisioning } = useProvisioning();
+
+  // Network health
+  const { healthReport } = useNetworkHealth({ autoStart: true });
+
+  return (
+    <View>
+      <Button
+        title={isScanning ? 'Stop Scan' : 'Start Scan'}
+        onPress={isScanning ? stopScanning : startScanning}
+      />
+      <FlatList
+        data={discoveredDevices}
+        renderItem={({ item }) => (
+          <DeviceItem
+            device={item}
+            onProvision={() => provisionDevice(item, {
+              unicastAddress: 0x0001,
+              networkKeyIndex: 0,
+              flags: 0,
+              ivIndex: 0,
+            })}
+          />
+        )}
+      />
+    </View>
+  );
+}
+```
+
+### Available Hooks
+
+1. **useScanning** - Device discovery and BLE scanning
+2. **useDeviceControl** - Device on/off, level, and color control
+3. **useGroups** - Group management and control
+4. **useProvisioning** - Device provisioning workflows
+5. **useFirmwareUpdate** - OTA firmware updates
+6. **useNetworkHealth** - Network monitoring and diagnostics
+7. **useVendorCommands** - Vendor-specific commands
+8. **useTelinkMesh** - Core mesh network operations
+
+See [API_REFERENCE.md](./API_REFERENCE.md) for complete hook documentation.
 
 ## API Reference
 
@@ -456,6 +555,27 @@ Complete example applications are available in the `/example` directory:
 - **Basic Mesh App**: Simple on/off control
 - **Advanced Controller**: Full feature demonstration
 - **Smart Home Demo**: Real-world usage scenarios
+
+### Advanced Documentation
+
+📖 **[Complete Examples & Best Practices](./PHASE8_EXAMPLES.md)**
+- Full-featured Smart Home application
+- Advanced use cases and patterns
+- Performance optimization techniques
+- Troubleshooting guides
+
+🚀 **[Production Readiness Guide](./PHASE9_PRODUCTION.md)**
+- Testing strategies with 80%+ coverage
+- CI/CD pipeline setup
+- Error tracking and analytics
+- Performance monitoring
+- NPM package publishing
+
+📚 **[API Reference](./API_REFERENCE.md)**
+- Complete API documentation
+- All hooks and classes
+- Type definitions
+- Platform-specific notes
 
 ## Contributing
 

@@ -26,6 +26,7 @@ export interface DiscoveredDevice {
     manufacturerData?: string;
   };
   scanRecord?: string;
+  lastSeen?: Date; // Timestamp of last discovery
 }
 
 export interface ProvisionConfig {

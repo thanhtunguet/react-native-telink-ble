@@ -63,6 +63,8 @@ export {
   useProvisioning,
   useFirmwareUpdate,
   useVendorCommands,
+  useScanning,
+  useGroups,
   type UseDeviceControlOptions,
   type UseDeviceControlReturn,
   type UseNetworkHealthOptions,
@@ -73,6 +75,10 @@ export {
   type UseFirmwareUpdateReturn,
   type UseVendorCommandsOptions,
   type UseVendorCommandsReturn,
+  type UseScanningOptions,
+  type UseScanningReturn,
+  type UseGroupsOptions,
+  type UseGroupsReturn,
 } from './hooks';
 
 // Event emitter for native events
